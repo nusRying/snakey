@@ -9,6 +9,11 @@ const app = express();
 app.use(cors());
 app.use(express.json()); // Allow JSON body parsing
 
+// Health check endpoint for Railway / load balancers
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', game: 'Snakey IO', uptime: process.uptime() });
+});
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
