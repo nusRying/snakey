@@ -6,10 +6,13 @@ class BotController {
         this.world = gameEngine.world;
         
         this.bots = new Map(); // Map of botId -> bot configuration
-        this.minPlayers = 10;
+        this.minPlayers = (gameEngine.roomId === 'OFFLINE') ? 22 : 12; // More bots for offline mode, slightly more for multiplayer too
         this.botCounter = 0;
         
         this.targetAngleOffsetRange = Math.PI / 4; // Max deviation when wandering
+        
+        this.respawnQueue = []; // [{ time: spawnAtTime }]
+        this.respawnDelay = (gameEngine.roomId === 'OFFLINE') ? 2000 : 5000; // Faster respawn in offline mode
     }
 
     update(pelletTree, bodyTree) {
@@ -21,11 +24,27 @@ class BotController {
 
     balancePopulation() {
         const totalPlayers = Object.keys(this.world.players).length;
-        
-        if (totalPlayers < this.minPlayers) {
+        const now = Date.now();
+
+        // Check if we need to queue a respawn
+        if (totalPlayers + this.respawnQueue.length < this.minPlayers) {
+            // In OFFLINE mode, spawn the first batch much faster (instant for the first 5)
+            const gap = this.minPlayers - (totalPlayers + this.respawnQueue.length);
+            const initialBurst = (this.gameEngine.roomId === 'OFFLINE' && totalPlayers < 5) ? 5 : 1;
+            
+            for (let i = 0; i < initialBurst && (totalPlayers + this.respawnQueue.length < this.minPlayers); i++) {
+                this.respawnQueue.push(now + (i * 200)); // 200ms spacing for burst
+            }
+        }
+
+        // Process queue
+        if (this.respawnQueue.length > 0 && now >= this.respawnQueue[0]) {
+            this.respawnQueue.shift();
             this.spawnBot();
-        } else if (totalPlayers > this.minPlayers && this.bots.size > 0) {
-            // Remove a bot if real players join and we exceed the cap
+        }
+
+        // If real players join and we exceed cap, remove bots
+        if (totalPlayers > this.minPlayers && this.bots.size > 0) {
             const firstBotId = this.bots.keys().next().value;
             this.removeBot(firstBotId);
         }
@@ -40,13 +59,19 @@ class BotController {
         
         this.world.players[botId] = newBotUser;
         
+        // Assign a personality
+        const personalities = ['AGGRESSIVE', 'COWARD', 'SCAVENGER'];
+        const personality = personalities[Math.floor(Math.random() * personalities.length)];
+
         this.bots.set(botId, {
             id: botId,
-            state: 'WANDER', // WANDER, FEED, FLEE, ATTACK
+            personality,
+            state: 'WANDER', // WANDER, FEED, FLEE, ATTACK, COIL
             targetAngle: Math.random() * Math.PI * 2,
             currentAngle: Math.random() * Math.PI * 2,
             actionTimer: 0,
-            turnSpeed: 0.15 // Radians per tick
+            turnSpeed: 0.15, // Radians per tick
+            targetPlayerId: null // For coiling/attacking
         });
         
         // Initialize an empty input object that the engine expects
@@ -68,161 +93,139 @@ class BotController {
     }
 
     calculateBotDecisions() {
+        const now = Date.now();
         for (const [botId, botData] of this.bots) {
             const botPlayer = this.world.players[botId];
-            if (!botPlayer) continue; 
+            if (!botPlayer) continue;
 
-            // Basic AI inputs we will submit to engine
-            let nextAngle = botPlayer.angle; // current angle default
+            // 1. Initialize Resultants
+            let desireX = 0;
+            let desireY = 0;
             let isBoosting = false;
             let useAbility = false;
-            
-            botData.actionTimer--;
 
-            // Find closest objects (Simple distance check for now, can be optimized with QuadTree later if needed, but 10 query range is cheap enough)
-            let closestPellet = null;
-            let closestPelletDist = 1000;
-            
-            let closestPlayer = null;
-            let closestPlayerDist = 1500;
+            // 2. Global Utility Modifiers (Personality based)
+            const p = botData.personality;
+            const aggression = (p === 'AGGRESSIVE') ? 1.5 : (p === 'SCAVENGER' ? 0.7 : 0.4);
+            const caution = (p === 'COWARD') ? 1.8 : (p === 'AGGRESSIVE' ? 0.5 : 1.0);
+            const hunger = (botPlayer.mass < 200) ? 2.0 : 1.0;
 
+            // 3. Potential Field: Pellets (Attraction)
+            const pelletSearchDist = 1000;
             for (const pid in this.world.pellets) {
-                const p = this.world.pellets[pid];
-                const dist = Math.sqrt(Math.pow(botPlayer.position.x - p.x, 2) + Math.pow(botPlayer.position.y - p.y, 2));
-                if (dist < closestPelletDist) {
-                    closestPelletDist = dist;
-                    closestPellet = p;
+                const pellet = this.world.pellets[pid];
+                const dx = pellet.x - botPlayer.position.x;
+                const dy = pellet.y - botPlayer.position.y;
+                const distSq = dx * dx + dy * dy;
+                
+                if (distSq < pelletSearchDist * pelletSearchDist) {
+                    const dist = Math.sqrt(distSq);
+                    const weight = (100 / (dist + 10)) * hunger; 
+                    desireX += (dx / dist) * weight;
+                    desireY += (dy / dist) * weight;
+                    
+                    // Utility check for Magnet
+                    if (dist < 400 && botPlayer.ability.type === 'MAGNET') useAbility = true;
                 }
             }
 
+            // 4. Potential Field: Other Players (Attraction/Repulsion)
             for (const pid in this.world.players) {
                 if (pid === botId) continue;
-                const p = this.world.players[pid];
-                const dist = Math.sqrt(Math.pow(botPlayer.position.x - p.position.x, 2) + Math.pow(botPlayer.position.y - p.position.y, 2));
-                if (dist < closestPlayerDist) {
-                    closestPlayerDist = dist;
-                    closestPlayer = p;
+                const other = this.world.players[pid];
+                const dx = other.position.x - botPlayer.position.x;
+                const dy = other.position.y - botPlayer.position.y;
+                const distSq = dx * dx + dy * dy;
+                const dist = Math.sqrt(distSq);
+
+                if (dist < 1500) {
+                    if (other.mass > botPlayer.mass * 1.1) {
+                        // REPULSION (Fear)
+                        const fearWeight = (1000000 / (distSq + 1)) * caution;
+                        desireX -= (dx / dist) * fearWeight;
+                        desireY -= (dy / dist) * fearWeight;
+                        
+                        if (dist < 600) isBoosting = true;
+                        if (dist < 300 && botPlayer.ability.type === 'SHIELD') useAbility = true;
+                    } else if (botPlayer.mass > other.mass * 1.3) {
+                        // ATTRACTION (Predation)
+                        const huntWeight = (500 / (dist + 1)) * aggression;
+                        desireX += (dx / dist) * huntWeight;
+                        desireY += (dy / dist) * huntWeight;
+                        
+                        if (dist < 500) isBoosting = true;
+                    }
                 }
             }
 
-            // Decide State
-            if (closestPlayer) {
-                if (closestPlayer.mass > botPlayer.mass * 1.5) {
-                    botData.state = 'FLEE';
-                } else if (botPlayer.mass > closestPlayer.mass * 1.5 && closestPlayerDist < 500) {
-                    botData.state = 'ATTACK';
-                } else {
-                    botData.state = 'FEED';
-                }
-            } else if (closestPellet) {
-                botData.state = 'FEED';
-            } else {
-                botData.state = 'WANDER';
-            }
-
-            // Execute State Logic
-            if (botData.state === 'FLEE') {
-                // Run strictly away from the player
-                nextAngle = Math.atan2(botPlayer.position.y - closestPlayer.position.y, botPlayer.position.x - closestPlayer.position.x);
-                isBoosting = true;
-                
-                if (botPlayer.ability.type === 'DASH' || botPlayer.ability.type === 'SHIELD') {
-                    useAbility = true;
-                }
-
-            } else if (botData.state === 'ATTACK') {
-                // Aim exactly for the player's head trajectory
-                const dx = closestPlayer.position.x - botPlayer.position.x;
-                const dy = closestPlayer.position.y - botPlayer.position.y;
-                nextAngle = Math.atan2(dy, dx);
-                
-                if (closestPlayerDist < 300) {
+            // 5. Potential Field: Hazards (Strong Repulsion)
+            for (const bh of this.world.blackHoles) {
+                const dx = bh.x - botPlayer.position.x;
+                const dy = bh.y - botPlayer.position.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < bh.pullRadius + 200) {
+                    const bhWeight = (2000000 / (dist + 1));
+                    desireX -= (dx / dist) * bhWeight;
+                    desireY -= (dy / dist) * bhWeight;
                     isBoosting = true;
                 }
-
-            } else if (botData.state === 'FEED') {
-                if (closestPellet) {
-                    const dx = closestPellet.x - botPlayer.position.x;
-                    const dy = closestPellet.y - botPlayer.position.y;
-                    
-                    // Smooth steering
-                    const targetA = Math.atan2(dy, dx);
-                    
-                    // If we only just picked a target, don't jitter instantly
-                    if (botData.actionTimer <= 0) {
-                        botData.targetAngle = targetA;
-                        botData.actionTimer = 5; // Hold this decision for 5 ticks
-                    }
-                    
-                    if (botPlayer.ability.type === 'MAGNET' && closestPelletDist < 500) {
-                        useAbility = true;
-                    }
-                }
-                nextAngle = botData.targetAngle;
-
-            } else {
-                // WANDER
-                if (botData.actionTimer <= 0) {
-                    // Randomly adjust angle slowly
-                    botData.targetAngle += (Math.random() * this.targetAngleOffsetRange * 2) - this.targetAngleOffsetRange;
-                    botData.actionTimer = 20; // Wander roughly in this direction for 20 ticks (1 second)
-                }
-                nextAngle = botData.targetAngle;
             }
 
-            // --- Decision overriding: High Priority ---
-            
-            // 1. Predictive Evasion (Avoid other snakes' bodies)
-            // Query a slightly larger area in front of the bot
-            const lookAheadDist = 100 + (botPlayer.radius * 2);
+            // 6. Potential Field: Boundaries
+            const m = 400;
+            const b = this.world.bounds;
+            if (botPlayer.position.x < m) desireX += (m - botPlayer.position.x) * 10;
+            else if (botPlayer.position.x > b.width - m) desireX -= (botPlayer.position.x - (b.width - m)) * 10;
+            if (botPlayer.position.y < m) desireY += (m - botPlayer.position.y) * 10;
+            else if (botPlayer.position.y > b.height - m) desireY -= (botPlayer.position.y - (b.height - m)) * 10;
+
+            // 7. Potential Field: Body Avoidance (Predictive)
+            const lookAhead = 150 + botPlayer.radius * 2;
             const evasionRange = {
-                x: botPlayer.position.x + Math.cos(botData.currentAngle) * lookAheadDist,
-                y: botPlayer.position.y + Math.sin(botData.currentAngle) * lookAheadDist,
+                x: botPlayer.position.x + Math.cos(botData.currentAngle) * lookAhead,
+                y: botPlayer.position.y + Math.sin(botData.currentAngle) * lookAhead,
                 radius: 120
             };
-            
-            // Using the existing bodyTree from GameEngine (if accessible via global or passed)
-            // For now, use a simple segment distance check if tree isn't passed, but the plan mentioned bodyTree.
-            // I will assume I can access the trees if I pass them to update() or if they are on the engine.
-            // Let's modify the update call in GameEngine to pass the trees.
-            
             if (this.currentBodyTree) {
                 const threats = this.currentBodyTree.query(evasionRange);
                 for (const t of threats) {
                     if (t.playerId === botId) continue;
-                    // Strong threat detected! Turn away hard.
-                    const angleToThreat = Math.atan2(t.y - botPlayer.position.y, t.x - botPlayer.position.x);
-                    botData.targetAngle = angleToThreat + Math.PI; // Turn 180 degrees away
-                    break;
+                    const threatDx = t.x - botPlayer.position.x;
+                    const threatDy = t.y - botPlayer.position.y;
+                    const tDist = Math.sqrt(threatDx * threatDx + threatDy * threatDy);
+                    const weight = 5000 / (tDist + 1);
+                    desireX -= (threatDx / tDist) * weight;
+                    desireY -= (threatDy / tDist) * weight;
+                    if (botPlayer.ability.type === 'SHIELD' && tDist < 100) useAbility = true;
                 }
             }
 
-            // 2. Boundary avoidance (hard turn away from edges)
-            const margin = 300;
-            if (botPlayer.position.x < margin) { 
-                botData.targetAngle = 0; // Turn right
-            } else if (botPlayer.position.x > this.world.bounds.width - margin) {
-                botData.targetAngle = Math.PI; // Turn left
-            }
-            
-            if (botPlayer.position.y < margin) {
-                botData.targetAngle = Math.PI / 2; // Turn down
-            } else if (botPlayer.position.y > this.world.bounds.height - margin) {
-                botData.targetAngle = -Math.PI / 2; // Turn up
+            // 8. Integrate Desire Vector to Angle
+            if (Math.abs(desireX) > 0.1 || Math.abs(desireY) > 0.1) {
+                botData.targetAngle = Math.atan2(desireY, desireX);
+            } else {
+                // Occasional random jitter if everything is neutral
+                if (Math.random() < 0.05) botData.targetAngle += (Math.random() - 0.5);
             }
 
-            // --- Steering Smoothing ---
-            // Interpolate current angle towards target angle
+            // 9. Steering Smoothing
             let diff = botData.targetAngle - botData.currentAngle;
             while (diff < -Math.PI) diff += Math.PI * 2;
             while (diff > Math.PI) diff -= Math.PI * 2;
-            
             botData.currentAngle += Math.max(-botData.turnSpeed, Math.min(botData.turnSpeed, diff));
-            nextAngle = botData.currentAngle;
 
-            // Apply inputs
+            // 10. Emotes & Social
+            if (Math.random() < 0.003) {
+                const emotes = ['cool', 'laugh', 'angry', 'scared'];
+                this.gameEngine.io.to(this.gameEngine.roomId).emit('emote', { 
+                    playerId: botId, 
+                    emoteId: emotes[Math.floor(Math.random() * emotes.length)] 
+                });
+            }
+
+            // Apply to engine
             this.gameEngine.inputs[botId] = {
-                angle: nextAngle,
+                angle: botData.currentAngle,
                 isBoosting: isBoosting,
                 useAbility: useAbility
             };

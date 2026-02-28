@@ -41,6 +41,8 @@ export class GameManager {
     this.activeEmotes = {}; 
     this.screenShake = 0; 
     this.particles = []; // Array of {x, y, vx, vy, life, color}
+    this.deathParticles = []; // Array of {x, y, vx, vy, life, color, size}
+    this.powerUpPickups = []; // Array of {x, y, color, startTime}
     
     this.stateBuffer = []; 
     this.renderDelay = 150; 
@@ -109,12 +111,27 @@ export class GameManager {
       }
     });
 
-    this.socket.on('pellet_update', ({ added, removed }) => {
+    this.socket.on('pellet_update', ({ added, removed, moved }) => {
        if (added) {
            added.forEach(p => { this.state.pellets[p.id] = p; });
        }
        if (removed) {
-           removed.forEach(id => { delete this.state.pellets[id]; });
+           let playedEat = false;
+           removed.forEach(id => { 
+               if (this.state.pellets[id] && !playedEat) {
+                   if (this.audio) this.audio.playEat();
+                   playedEat = true; // Avoid overlapping sounds in same frame
+               }
+               delete this.state.pellets[id]; 
+           });
+       }
+       if (moved) {
+           moved.forEach(p => {
+               if (this.state.pellets[p.id]) {
+                   this.state.pellets[p.id].x = p.x;
+                   this.state.pellets[p.id].y = p.y;
+               }
+           });
        }
     });
 
@@ -129,6 +146,10 @@ export class GameManager {
       // Calculate network lag for diagnostics (time since last packet)
       this.currentLag = now - (snapshot.time + this.serverClockOffset);
       
+      if (this.stateBuffer.length === 0) {
+          const samplePlayer = Object.values(snapshot.players)[0];
+          console.log('GameManager: Received first snapshot. Player count:', Object.keys(snapshot.players).length, 'Sample player:', samplePlayer);
+      }
       this.stateBuffer.push(snapshot);
       
       if (this.stateBuffer.length > 50) {
@@ -159,8 +180,31 @@ export class GameManager {
         this.activeEmotes[playerId] = { emoteId, time: Date.now() };
     });
 
+    this.socket.on('player_death', (data) => {
+        const count = 15; // Optimized count
+        for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 200 + 50;
+            this.deathParticles.push({
+                x: data.x,
+                y: data.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                size: Math.random() * 3 + 2,
+                color: data.color || '#ff0055',
+                life: 1.0
+            });
+        }
+        
+        // Play sound for everyone if near camera
+        if (this.audio && this.audio.playDeath) {
+            // Optional: Distance check could go here
+            this.audio.playDeath();
+        }
+    });
+
     this.socket.on('died', (stats) => {
-        this.audio.playKill(); // Sad sound for death
+        // Personal game over logic only
         setTimeout(() => {
             this.cleanup();
             if (this.onGameOver) this.onGameOver(stats.xpEarned || 0);
@@ -465,7 +509,7 @@ export class GameManager {
                 })
             };
             
-            this.state.players[id] = interpPlayer;
+            interpolatedPlayers[id] = interpPlayer;
 
             // Emit particles if boosting
             if (p0.isBoosting && Math.random() < 0.2) {
@@ -480,6 +524,26 @@ export class GameManager {
             }
         }
         
+        this.state.players = interpolatedPlayers;
+        
+        // Detect power-up pickups
+        if (s0.powerUps && this.state.powerUps) {
+            for (const id in this.state.powerUps) {
+                if (!s0.powerUps[id]) {
+                    const pu = this.state.powerUps[id];
+                    this.powerUpPickups.push({
+                        x: pu.x,
+                        y: pu.y,
+                        color: pu.type === 'MAGNET' ? '#00f2ff' : (pu.type === 'SHIELD' ? '#ffdf00' : '#ff003c'),
+                        startTime: Date.now()
+                    });
+                    if (this.audio && typeof this.audio.playPowerUp === 'function') {
+                        this.audio.playPowerUp();
+                    }
+                }
+            }
+        }
+
         // Update particles
         this.particles.forEach(p => {
             p.x += p.vx * 0.05;
@@ -542,23 +606,62 @@ export class GameManager {
     // Draw Power-Ups
     this.renderer.drawPowerUps(this.state.powerUps, time);
     
-    this.renderer.drawPellets(this.state.pellets);
-    this.renderer.drawPlayers(this.state.players, this.myId, this.state.kingId, this.activeEmotes);
+    this.renderer.drawPellets(this.state.pellets, camX, camY, this.canvas.width, this.canvas.height);
+    this.renderer.drawPlayers(this.state.players, this.myId, this.state.kingId, camX, camY, this.canvas.width, this.canvas.height, this.activeEmotes);
     
     // Render Particles
+    this.renderer.drawDeathExplosion(this.deathParticles);
+    
+    this.powerUpPickups.forEach(pu => {
+        const age = (now - pu.startTime) / 1000;
+        this.renderer.drawPowerUpPickup(pu.x, pu.y, pu.color, age);
+    });
+    this.powerUpPickups = this.powerUpPickups.filter(pu => (now - pu.startTime) < 500);
+
+    // Boost Particles with culling
+    const margin = 100;
+    const minX = camX - this.canvas.width / 2 - margin;
+    const maxX = camX + this.canvas.width / 2 + margin;
+    const minY = camY - this.canvas.height / 2 - margin;
+    const maxY = camY + this.canvas.height / 2 + margin;
+
     this.particles.forEach(p => {
+        if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) {
+            p.life -= 0.02; // Still age them
+            return;
+        }
         this.ctx.beginPath();
         this.ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
         this.ctx.fillStyle = p.color;
         this.ctx.globalAlpha = p.life;
         this.ctx.fill();
+        p.life -= 0.02;
     });
+    this.particles = this.particles.filter(p => p.life > 0);
     this.ctx.globalAlpha = 1.0;
+
+    // Update death particles
+    this.deathParticles.forEach(p => {
+        p.x += p.vx * 0.016; 
+        p.y += p.vy * 0.016;
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+        p.life -= 0.01;
+    });
+    this.deathParticles = this.deathParticles.filter(p => p.life > 0);
 
     this.ctx.restore();
     
     if (myPlayer) {
-       this.renderer.drawHUD(myPlayer, this.canvas.width, this.canvas.height);
+       this.renderer.drawHUD(
+           myPlayer, 
+           this.canvas.width, 
+           this.canvas.height, 
+           Object.keys(this.state.players).length, 
+           Object.keys(this.state.pellets).length, 
+           this.currentLag, 
+           this.renderDelay
+       );
        
        // Draw Diagnostics
        this.ctx.fillStyle = 'rgba(0,0,0,0.5)';

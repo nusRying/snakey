@@ -11,7 +11,7 @@ class WorldState {
     this.powerUps = {};
     this.powerUpIdCounter = 0;
     
-    this.pelletUpdates = { added: [], removed: [] };
+    this.pelletUpdates = { added: [], removed: [], moved: [] };
   }
 
   generateBlackHoles(count) {
@@ -122,9 +122,16 @@ class WorldState {
       }
     }
 
+    markPelletMoved(pellet) {
+        // Avoid pushing duplicates per tick
+        if (!this.pelletUpdates.moved.some(p => p.id === pellet.id)) {
+            this.pelletUpdates.moved.push({ id: pellet.id, x: pellet.x, y: pellet.y });
+        }
+    }
+
     getPelletUpdate() {
         const update = { ...this.pelletUpdates };
-        this.pelletUpdates = { added: [], removed: [] }; // Reset
+        this.pelletUpdates = { added: [], removed: [], moved: [] }; // Reset
         return update;
     }
   

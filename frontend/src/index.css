@@ -31,4 +31,244 @@ html {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background-color: #050505;
+}
+
+/* Premium Title Screen Styling */
+.title-screen {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  z-index: 100;
+}
+
+.title-bg-canvas {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+.title-content {
+  position: relative;
+  z-index: 101;
+  text-align: center;
+}
+
+.main-logo {
+  font-size: 8rem;
+  font-weight: 900;
+  letter-spacing: 0.5rem;
+  background: linear-gradient(to bottom, #00f2ff, #0088ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 30px rgba(0, 242, 255, 0.4);
+  margin-bottom: 0.5rem;
+  font-family: 'Outfit', 'Inter', sans-serif;
+}
+
+.subtitle {
+  font-size: 1.2rem;
+  color: #888;
+  letter-spacing: 0.3rem;
+  text-transform: uppercase;
+  margin-bottom: 4rem;
+}
+
+.menu-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.menu-btn {
+  position: relative;
+  padding: 1.2rem 4rem;
+  font-size: 1.4rem;
+  font-weight: 700;
+  border-radius: 50px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  overflow: hidden;
+}
+
+.play-btn {
+  background: linear-gradient(45deg, #00f2ff, #0088ff);
+  color: white;
+  box-shadow: 0 10px 30px rgba(0, 242, 255, 0.3);
+  text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.play-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 15px 40px rgba(0, 242, 255, 0.5);
+}
+
+.btn-glow {
+  position: absolute;
+  top: -50%; left: -50%;
+  width: 200%; height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.play-btn:hover .btn-glow {
+  opacity: 1;
+}
+
+.secondary-btns {
+  display: flex;
+  gap: 1rem;
+}
+
+.menu-btn.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #bbb;
+  padding: 0.8rem 2.5rem;
+  font-size: 1rem;
+}
+
+.menu-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+/* Glass Cards for Options/Help */
+.menu-screen {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(5px);
+  animation: fadeIn 0.3s ease-out;
+}
+
+.glass-card {
+  background: rgba(20, 20, 30, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3rem;
+  border-radius: 24px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+
+.glass-card h2 {
+  font-size: 2.5rem;
+  margin-bottom: 2rem;
+  background: linear-gradient(to right, #00f2ff, #ff003c);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.option-row label {
+  color: #888;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.option-row input[type="range"] {
+  flex: 1;
+  margin: 0 1rem;
+  accent-color: #00f2ff;
+}
+
+.option-row span {
+  width: 40px;
+  text-align: right;
+  font-family: monospace;
+}
+
+.toggle-btn {
+  padding: 0.5rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  cursor: pointer;
+}
+
+.toggle-btn.on { background: #00f2ff; color: black; border-color: #00f2ff; }
+.toggle-btn.off { background: #333; color: #888; }
+
+.back-btn { margin-top: 2rem; width: 100%; }
+
+/* Help Screen Styles */
+.help-section {
+  text-align: left;
+  margin-bottom: 2rem;
+}
+
+.help-section h3 {
+  font-size: 0.9rem;
+  color: #ed2d62;
+  margin-bottom: 1rem;
+}
+
+.control-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+}
+
+.key { font-weight: 700; color: #00f2ff; }
+.desc { color: #aaa; font-size: 0.9rem; }
+
+.help-section ul {
+  padding-left: 1.2rem;
+  color: #aaa;
+}
+
+.help-section li { margin-bottom: 0.5rem; }
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.footer-credits {
+  position: absolute;
+  bottom: 2rem;
+  color: #444;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
 }

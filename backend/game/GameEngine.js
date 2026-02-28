@@ -109,8 +109,11 @@ class GameEngine {
     const player = this.world.players[id];
     if (!player) return;
 
-    // Drop mass as pellets
-    const dropCount = Math.floor(player.mass / 5);
+    // Drop mass as pellets (Reduced to 15% for performance)
+    const dropCount = Math.floor(player.mass / 6); 
+    const pelletLifetime = 30000; // 30 seconds
+    const expiresAt = Date.now() + pelletLifetime;
+
     for (let i = 0; i < dropCount; i++) {
         let spawnPos = player.position;
         if (player.segments.length > 0) {
@@ -120,11 +123,13 @@ class GameEngine {
         const pelletId = this.world.pelletIdCounter++;
         this.world.pellets[pelletId] = {
             id: pelletId,
-            x: spawnPos.x + (Math.random() * 40 - 20),
-            y: spawnPos.y + (Math.random() * 40 - 20),
+            x: spawnPos.x + (Math.random() * 60 - 30),
+            y: spawnPos.y + (Math.random() * 60 - 30),
             value: 5, 
-            color: player.color
+            color: player.color,
+            expiresAt: expiresAt // Add expiration
         };
+        this.world.pelletUpdates.added.push(this.world.pellets[pelletId]);
     }
 
     if (killerId && this.world.players[killerId]) {
@@ -153,6 +158,14 @@ class GameEngine {
         // Track kill for the database
         this.world.players[killerId].matchKills = (this.world.players[killerId].matchKills || 0) + 1;
     }
+
+    // Broadcast death location for particles
+    this.io.to(this.roomId).emit('player_death', {
+        id: id,
+        x: player.position.x,
+        y: player.position.y,
+        color: player.color
+    });
 
     // 1 mass = 1 XP, plus overall score accumulation
     const xpEarned = Math.floor(player.score + player.mass);
@@ -493,6 +506,7 @@ class GameEngine {
               // Pull pellet towards player
               pellet.x -= (dx / dist) * 200 * dt;
               pellet.y -= (dy / dist) * 200 * dt;
+              this.world.markPelletMoved(pellet);
            }
        }
 
@@ -538,6 +552,14 @@ class GameEngine {
     // Replenish pellets
     if (Object.keys(this.world.pellets).length < 200) {
         this.world.spawnPellets(100);
+    }
+
+    // Pellet Cleanup (Despawn dropped pellets)
+    for (const pid in this.world.pellets) {
+        const p = this.world.pellets[pid];
+        if (p.expiresAt && now > p.expiresAt) {
+            this.world.removePellet(pid);
+        }
     }
 
     // Spawn Power-Ups

@@ -1,6 +1,7 @@
 export class Renderer {
   constructor(ctx) {
     this.ctx = ctx;
+    this.isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || ('ontouchstart' in window);
   }
   
   drawGrid(bounds, cameraX = bounds.width/2, cameraY = bounds.height/2, viewWidth = window.innerWidth, viewHeight = window.innerHeight) {
@@ -30,8 +31,7 @@ export class Renderer {
   drawBounds(bounds) {
     this.ctx.strokeStyle = '#ff0055';
     this.ctx.lineWidth = 10;
-    this.ctx.shadowBlur = 30;
-    this.ctx.shadowColor = '#ff0055';
+    if (!this.isMobile) { this.ctx.shadowBlur = 30; this.ctx.shadowColor = '#ff0055'; }
     this.ctx.strokeRect(0, 0, bounds.width, bounds.height);
     this.ctx.shadowBlur = 0;
   }
@@ -65,36 +65,33 @@ export class Renderer {
       
       this.ctx.save();
       for (const bh of blackHoles) {
-          // Draw the swirling event horizon
           this.ctx.beginPath();
           this.ctx.arc(bh.x, bh.y, bh.radius, 0, Math.PI * 2);
           this.ctx.fillStyle = '#050510';
           this.ctx.fill();
           this.ctx.strokeStyle = '#3300ff';
           this.ctx.lineWidth = 4;
-          this.ctx.shadowBlur = 30;
-          this.ctx.shadowColor = '#3300ff';
+          if (!this.isMobile) { this.ctx.shadowBlur = 30; this.ctx.shadowColor = '#3300ff'; }
           this.ctx.stroke();
           
-          // Draw accretion disk (swirling effect)
-          this.ctx.save();
-          this.ctx.translate(bh.x, bh.y);
-          this.ctx.rotate(time * 0.002);
-          this.ctx.beginPath();
-          this.ctx.arc(0, 0, bh.radius * 2, 0, Math.PI);
-          this.ctx.strokeStyle = 'rgba(100, 50, 255, 0.5)';
-          this.ctx.lineWidth = 2;
-          this.ctx.stroke();
+          if (!this.isMobile) {
+            this.ctx.save();
+            this.ctx.translate(bh.x, bh.y);
+            this.ctx.rotate(time * 0.002);
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, bh.radius * 2, 0, Math.PI);
+            this.ctx.strokeStyle = 'rgba(100, 50, 255, 0.5)';
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+            this.ctx.rotate(Math.PI / 2);
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, bh.radius * 1.5, 0, Math.PI);
+            this.ctx.strokeStyle = 'rgba(50, 0, 255, 0.8)';
+            this.ctx.lineWidth = 3;
+            this.ctx.stroke();
+            this.ctx.restore();
+          }
           
-          this.ctx.rotate(Math.PI / 2);
-          this.ctx.beginPath();
-          this.ctx.arc(0, 0, bh.radius * 1.5, 0, Math.PI);
-          this.ctx.strokeStyle = 'rgba(50, 0, 255, 0.8)';
-          this.ctx.lineWidth = 3;
-          this.ctx.stroke();
-          this.ctx.restore();
-          
-          // Draw pull radius (faint)
           this.ctx.beginPath();
           this.ctx.arc(bh.x, bh.y, bh.pullRadius, 0, Math.PI * 2);
           this.ctx.fillStyle = 'rgba(20, 0, 50, 0.1)';
@@ -114,9 +111,8 @@ export class Renderer {
           this.ctx.fill();
           
           this.ctx.strokeStyle = wh.color;
-          this.ctx.lineWidth = 5 + Math.sin(time * 0.005) * 2; // Pulsing ring
-          this.ctx.shadowBlur = 20 + Math.sin(time * 0.005) * 10;
-          this.ctx.shadowColor = wh.color;
+          this.ctx.lineWidth = 5 + Math.sin(time * 0.005) * 2;
+          if (!this.isMobile) { this.ctx.shadowBlur = 20 + Math.sin(time * 0.005) * 10; this.ctx.shadowColor = wh.color; }
           this.ctx.stroke();
           
           // Draw inner spiral
@@ -149,8 +145,7 @@ export class Renderer {
           const radius = pu.radius + pulse;
 
           // Outer glow
-          this.ctx.shadowBlur = 20;
-          this.ctx.shadowColor = pu.color;
+          if (!this.isMobile) { this.ctx.shadowBlur = 20; this.ctx.shadowColor = pu.color; }
           
           this.ctx.beginPath();
           this.ctx.arc(pu.x, pu.y, radius, 0, Math.PI * 2);
@@ -173,27 +168,49 @@ export class Renderer {
       }
   }
 
-  drawPellets(pellets) {
+  drawPellets(pellets, camX, camY, viewWidth, viewHeight) {
+    const margin = 50;
+    const minX = camX - viewWidth / 2 - margin;
+    const maxX = camX + viewWidth / 2 + margin;
+    const minY = camY - viewHeight / 2 - margin;
+    const maxY = camY + viewHeight / 2 + margin;
+
     for (const id in pellets) {
       const p = pellets[id];
+      // Skip pellets outside view
+      if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
+
       this.ctx.beginPath();
-      // Slightly larger glowing pellets
       this.ctx.arc(p.x, p.y, p.value * 1.5, 0, Math.PI * 2);
       this.ctx.fillStyle = p.color;
-      this.ctx.shadowBlur = 15;
-      this.ctx.shadowColor = p.color;
+      // Shadow removed for pellets to improve performance
       this.ctx.fill();
     }
-    this.ctx.shadowBlur = 0;
   }
 
-  drawPlayers(players, myId, kingId, activeEmotes = {}) {
+  drawPlayers(players, myId, kingId, camX, camY, viewWidth, viewHeight, activeEmotes = {}) {
     // Draw players (smaller mass lower so bigger snakes on top)
     const sortedPlayers = Object.values(players).sort((a,b) => a.mass - b.mass);
+    const margin = 200; // Extra margin for names/glow
+    const minX = camX - viewWidth / 2 - margin;
+    const maxX = camX + viewWidth / 2 + margin;
+    const minY = camY - viewHeight / 2 - margin;
+    const maxY = camY + viewHeight / 2 + margin;
 
     for (const p of sortedPlayers) {
+      if (!p || !p.position) continue;
+
+      // Skip players completely outside view
+      const camMargin = 400; // wide margin
+      if (p.position.x < minX - camMargin || p.position.x > maxX + camMargin || 
+          p.position.y < minY - camMargin || p.position.y > maxY + camMargin) {
+          continue; 
+      }
+      
       const isMe = p.id === myId;
       const isKing = p.id === kingId;
+      if (!p.color) console.warn(`Renderer: Player ${p.id} has no color!`);
+      const playerColor = p.color || '#00ffcc'; // Fallback
       const emoteData = activeEmotes[p.id];
       
       this.ctx.lineCap = 'round';
@@ -212,17 +229,15 @@ export class Renderer {
         
         // Boost glow effect logic
         if (p.isBoosting || (p.ability.isActive && p.ability.type === 'DASH')) {
-           this.ctx.shadowBlur = 20;
-           this.ctx.shadowColor = '#ffffff';
+           if (!this.isMobile && isMe) { this.ctx.shadowBlur = 20; this.ctx.shadowColor = '#ffffff'; }
            this.ctx.fillStyle = '#ffffff';
         } else {
-           this.ctx.shadowBlur = isMe ? 15 : 5;
-           this.ctx.shadowColor = p.color;
+           if (!this.isMobile && isMe) { this.ctx.shadowBlur = isMe ? 15 : 5; this.ctx.shadowColor = p.color; }
            this.ctx.fillStyle = p.color;
         }
         
         this.ctx.fill();
-        this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        this.ctx.strokeStyle = 'rgba(0,0,0,0.3)'; // Slightly more transparent stroke
         this.ctx.lineWidth = 1.5;
         this.ctx.stroke();
       }
@@ -234,9 +249,11 @@ export class Renderer {
       this.ctx.arc(p.position.x, p.position.y, visualRadius, 0, Math.PI * 2);
       this.ctx.fillStyle = isMe ? '#ffffff' : (p.isBoosting ? '#fff' : p.color);
       
-      // Head Glow
-      this.ctx.shadowBlur = 25 + (p.pulse || 0) * 30;
-      this.ctx.shadowColor = isMe ? '#ffffff' : p.color;
+      // Head Glow only for self or king
+      if (!this.isMobile && (isMe || isKing)) { 
+          this.ctx.shadowBlur = 25 + (p.pulse || 0) * 30; 
+          this.ctx.shadowColor = isMe ? '#ffffff' : p.color; 
+      }
       
       this.ctx.fill();
       this.ctx.shadowBlur = 0;
@@ -308,8 +325,7 @@ export class Renderer {
           this.ctx.translate(p.position.x, p.position.y);
           this.ctx.rotate(angle + Math.PI / 2); // Sit on top of head
           this.ctx.fillStyle = '#FFD700'; // Gold
-          this.ctx.shadowBlur = 15;
-          this.ctx.shadowColor = '#FFD700';
+          if (!this.isMobile) { this.ctx.shadowBlur = 15; this.ctx.shadowColor = '#FFD700'; }
           
           const crW = p.radius * 1.5;
           const crH = p.radius;
@@ -369,7 +385,7 @@ export class Renderer {
     }
   }
 
-  drawHUD(player, canvasWidth, canvasHeight) {
+  drawHUD(player, canvasWidth, canvasHeight, playerCount = 0, pelletCount = 0, lag = 0, renderDelay = 150) {
       if (!player) return;
 
       const ability = player.ability;
@@ -444,6 +460,13 @@ export class Renderer {
               powerUpIdx++;
           }
       }
+
+      // DEBUG OVERLAY (Top Center)
+      this.ctx.fillStyle = 'rgba(0, 255, 0, 0.7)';
+      this.ctx.font = '10px monospace';
+      this.ctx.textAlign = 'center';
+      const debugText = `PLAYERS: ${playerCount} | PELLETS: ${pelletCount} | LAG: ${~~lag}ms | RE-DELAY: ${renderDelay}ms`;
+      this.ctx.fillText(debugText, canvasWidth / 2, 15);
   }
 
   drawLeaderboard(players, myId) {
@@ -558,41 +581,78 @@ export class Renderer {
       }
   }
 
+  drawDeathExplosion(particles) {
+    this.ctx.shadowBlur = 0; // Disable shadow for particles entirely
+    particles.forEach(p => {
+      this.ctx.beginPath();
+      // Draw a small radiating "spark"
+      this.ctx.arc(p.x, p.y, p.size || 2, 0, Math.PI * 2);
+      this.ctx.fillStyle = p.color;
+      this.ctx.globalAlpha = p.life;
+      this.ctx.fill();
+    });
+    this.ctx.globalAlpha = 1.0;
+  }
+
+  drawPowerUpPickup(x, y, color, age) {
+    const maxAge = 0.5; // seconds
+    const progress = age / maxAge;
+    if (progress > 1) return;
+
+    this.ctx.save();
+    this.ctx.beginPath();
+    // Expanding ring
+    const radius = progress * 50;
+    this.ctx.arc(x, y, radius, 0, Math.PI * 2);
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = 4 * (1 - progress);
+    this.ctx.globalAlpha = 1 - progress;
+    this.ctx.stroke();
+
+    // Secondary pulse
+    if (progress > 0.2) {
+      this.ctx.beginPath();
+      this.ctx.arc(x, y, radius * 0.6, 0, Math.PI * 2);
+      this.ctx.stroke();
+    }
+    this.ctx.restore();
+  }
+
   drawMobileUI(joystick, boostBtn, abilityBtn) {
-      // Draw Joystick Base
-      if (joystick.active) {
-          this.ctx.beginPath();
-          this.ctx.arc(joystick.baseX, joystick.baseY, joystick.radius, 0, Math.PI * 2);
-          this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-          this.ctx.fill();
-          this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-          this.ctx.lineWidth = 2;
-          this.ctx.stroke();
-          
-          // Draw Stick
-          this.ctx.beginPath();
-          this.ctx.arc(joystick.stickX, joystick.stickY, joystick.radius * 0.4, 0, Math.PI * 2);
-          this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-          this.ctx.fill();
-      }
+    // Draw Joystick Base
+    if (joystick.active) {
+      this.ctx.beginPath();
+      this.ctx.arc(joystick.baseX, joystick.baseY, joystick.radius, 0, Math.PI * 2);
+      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      this.ctx.fill();
+      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      this.ctx.lineWidth = 2;
+      this.ctx.stroke();
+      
+      // Draw Stick
+      this.ctx.beginPath();
+      this.ctx.arc(joystick.stickX, joystick.stickY, joystick.radius * 0.4, 0, Math.PI * 2);
+      this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      this.ctx.fill();
+    }
 
-      // Draw Buttons
-      const drawBtn = (btn, text, color) => {
-          this.ctx.beginPath();
-          this.ctx.arc(btn.x, btn.y, btn.radius, 0, Math.PI * 2);
-          this.ctx.fillStyle = btn.active ? `rgba(${color}, 0.6)` : `rgba(${color}, 0.2)`;
-          this.ctx.fill();
-          this.ctx.strokeStyle = `rgba(${color}, 0.5)`;
-          this.ctx.lineWidth = 2;
-          this.ctx.stroke();
-          
-          this.ctx.fillStyle = 'white';
-          this.ctx.font = 'bold 12px Inter, sans-serif';
-          this.ctx.textAlign = 'center';
-          this.ctx.fillText(text, btn.x, btn.y + 4);
-      };
+    // Draw Buttons
+    const drawBtn = (btn, text, color) => {
+      this.ctx.beginPath();
+      this.ctx.arc(btn.x, btn.y, btn.radius, 0, Math.PI * 2);
+      this.ctx.fillStyle = btn.active ? `rgba(${color}, 0.6)` : `rgba(${color}, 0.2)`;
+      this.ctx.fill();
+      this.ctx.strokeStyle = `rgba(${color}, 0.5)`;
+      this.ctx.lineWidth = 2;
+      this.ctx.stroke();
+      
+      this.ctx.fillStyle = 'white';
+      this.ctx.font = 'bold 12px Inter, sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.fillText(text, btn.x, btn.y + 4);
+    };
 
-      drawBtn(boostBtn, "BOOST", "255, 80, 80");
-      drawBtn(abilityBtn, "SKILL", "80, 200, 255");
+    drawBtn(boostBtn, "BOOST", "255, 80, 80");
+    drawBtn(abilityBtn, "SKILL", "80, 200, 255");
   }
 }
