@@ -8,33 +8,45 @@ export const SKINS = [
 
 export class ProfileManager {
   static getProfile() {
+    console.log('ProfileManager: getProfile called');
     const defaultProfile = {
       name: 'Player',
       xp: 0,
+
       level: 1,
       selectedSkin: 'default',
       unlockedSkins: ['default']
     };
+
+    // localStorage may not exist in some environments (SSR, tests, incognito)
+    if (typeof localStorage === 'undefined' || localStorage === null) {
+      console.warn('ProfileManager: localStorage unavailable, using default profile');
+      return defaultProfile;
+    }
     
     try {
       const stored = localStorage.getItem('snakey_profile');
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Recalculate level just in case
-        parsed.level = this.calculateLevel(parsed.xp);
-        
-        // Ensure unlocked skins are correct for level
-        parsed.unlockedSkins = SKINS.filter(s => s.requiredLevel <= parsed.level).map(s => s.id);
-        
-        // Validate selected skin
-        if (!parsed.unlockedSkins.includes(parsed.selectedSkin)) {
-            parsed.selectedSkin = 'default';
+        // guard in case JSON.parse returns null/undefined
+        if (parsed && typeof parsed === 'object') {
+          // Recalculate level just in case
+          parsed.level = this.calculateLevel(parsed.xp);
+          
+          // Ensure unlocked skins are correct for level
+          parsed.unlockedSkins = SKINS.filter(s => s.requiredLevel <= parsed.level).map(s => s.id);
+          
+          // Validate selected skin
+          if (!parsed.unlockedSkins.includes(parsed.selectedSkin)) {
+              parsed.selectedSkin = 'default';
+          }
+
+          return { ...defaultProfile, ...parsed };
         }
-        
-        return { ...defaultProfile, ...parsed };
       }
     } catch(e) {
       console.error('Error reading profile', e);
+      try { localStorage.removeItem('snakey_profile'); } catch {} // wipe bad data
     }
     return defaultProfile;
   }
@@ -79,5 +91,20 @@ export class ProfileManager {
         newLevel: p.level,
         profile: p
     };
+  }
+
+  /**
+   * Completely wipes the stored profile and returns the default object.
+   * Useful for debugging or recovering from corrupted storage.
+   */
+  static resetProfile() {
+    try {
+      if (typeof localStorage !== 'undefined' && localStorage !== null) {
+        localStorage.removeItem('snakey_profile');
+      }
+    } catch (e) {
+      console.warn('ProfileManager.resetProfile: could not clear localStorage', e);
+    }
+    return this.getProfile();
   }
 }

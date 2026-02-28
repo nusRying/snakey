@@ -2,16 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { ProfileManager, SKINS } from '../game/ProfileManager';
 
 const Lobby = ({ onPlay, lastMatchStats }) => {
-  const [profile, setProfile] = useState(null);
-  const [nameInput, setNameInput] = useState('');
+  // start with a valid profile synchronously to avoid a "stuck" loading state
+  const initialProfile = ProfileManager.getProfile();
+  const [profile, setProfile] = useState(initialProfile);
+  const [nameInput, setNameInput] = useState(initialProfile.name);
   const [modeInput, setModeInput] = useState('FFA');
   const [globalLeaderboard, setGlobalLeaderboard] = useState([]);
   
   useEffect(() => {
-    const loadedProfile = ProfileManager.getProfile();
-    setProfile(loadedProfile);
-    setNameInput(loadedProfile.name);
-    
+    console.log('Lobby: useEffect triggered');
+    // profile already initialized, but we may want to refresh it in case storage changed
+    try {
+      const loaded = ProfileManager.getProfile();
+      console.log('Lobby: profile loaded in effect', loaded);
+      setProfile(loaded);
+      setNameInput(loaded.name);
+    } catch (err) {
+      console.error('Lobby: failed to load profile in effect', err);
+    }
+
     // Fetch Global Leaderboard from SQLite API
     fetch(window.location.hostname === 'localhost' ? 'http://localhost:3000/api/leaderboard' : '/api/leaderboard')
         .then(res => res.json())
@@ -19,9 +28,28 @@ const Lobby = ({ onPlay, lastMatchStats }) => {
         .catch(err => console.error("Failed to fetch leaderboard", err));
   }, []);
 
-  if (!profile) return null;
+  // profile should never be falsy; show an error if somehow it is
+  if (!profile) return (
+    <div style={{
+      color:'black', backgroundColor: 'yellow', padding: '20px', 
+      fontSize:'32px', zIndex: 9999, position: 'fixed', top: '120px', left: '20px'
+    }}>
+      LOBBY: UNABLE TO LOAD PROFILE. Try clearing localStorage and reloading.
+    </div>
+  );
 
-  const progress = ProfileManager.getLevelProgress(profile.xp);
+
+  console.log('Lobby: profile is', profile);
+  let progress = { currentLevel: 0, percent: 0, xpIntoLevel: 0, xpRequired: 0 };
+  try {
+    if (profile) {
+        progress = ProfileManager.getLevelProgress(profile.xp || 0);
+    }
+  } catch (err) {
+    console.error("CRASH in ProfileManager.getLevelProgress:", err);
+    return <div style={{color: 'red', background: 'white', padding: '50px'}}>CRASH IN XP CALC: {err.message}</div>;
+  }
+
 
   const handlePlay = () => {
     profile.name = nameInput || 'Snek';
@@ -49,6 +77,8 @@ const Lobby = ({ onPlay, lastMatchStats }) => {
         background: 'rgba(20, 20, 30, 0.8)', padding: '40px', borderRadius: '15px',
         boxShadow: '0 0 30px rgba(0, 255, 204, 0.2)', textAlign: 'center', maxWidth: '500px', width: '90%'
       }}>
+
+
         <h1 style={{ color: '#00ffcc', textShadow: '0 0 10px #00ffcc', marginBottom: '10px' }}>SNAKEY.IO</h1>
         
         <div style={{ marginBottom: '20px' }}>
@@ -80,6 +110,19 @@ const Lobby = ({ onPlay, lastMatchStats }) => {
              textAlign: 'center', marginBottom: '10px', outline: 'none'
           }}
         />
+        <button
+          onClick={() => {
+            const fresh = ProfileManager.resetProfile();
+            setProfile(fresh);
+            setNameInput(fresh.name);
+            setModeInput('FFA');
+          }}
+          style={{
+            marginTop: '10px', padding: '8px 12px', fontSize: '0.9em',
+            background: '#aa0000', color: 'white', border: 'none', borderRadius: '6px',
+            cursor: 'pointer'
+          }}
+        >Reset Profile</button>
 
         <select 
             value={modeInput}

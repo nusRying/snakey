@@ -12,7 +12,9 @@ class BotController {
         this.targetAngleOffsetRange = Math.PI / 4; // Max deviation when wandering
     }
 
-    update() {
+    update(pelletTree, bodyTree) {
+        this.currentPelletTree = pelletTree;
+        this.currentBodyTree = bodyTree;
         this.balancePopulation();
         this.calculateBotDecisions();
     }
@@ -42,7 +44,9 @@ class BotController {
             id: botId,
             state: 'WANDER', // WANDER, FEED, FLEE, ATTACK
             targetAngle: Math.random() * Math.PI * 2,
-            actionTimer: 0 // Used to prevent jitter in decisions
+            currentAngle: Math.random() * Math.PI * 2,
+            actionTimer: 0,
+            turnSpeed: 0.15 // Radians per tick
         });
         
         // Initialize an empty input object that the engine expects
@@ -166,13 +170,55 @@ class BotController {
                 nextAngle = botData.targetAngle;
             }
 
-            // Boundary avoidance (soft turn away from edges)
-            const margin = 200;
-            if (botPlayer.position.x < margin) botData.targetAngle = 0; // Turn right
-            if (botPlayer.position.y < margin) botData.targetAngle = Math.PI/2; // Turn down
-            if (botPlayer.position.x > this.world.bounds.width - margin) botData.targetAngle = Math.PI; // Turn left
-            if (botPlayer.position.y > this.world.bounds.height - margin) botData.targetAngle = -Math.PI/2; // Turn up
+            // --- Decision overriding: High Priority ---
+            
+            // 1. Predictive Evasion (Avoid other snakes' bodies)
+            // Query a slightly larger area in front of the bot
+            const lookAheadDist = 100 + (botPlayer.radius * 2);
+            const evasionRange = {
+                x: botPlayer.position.x + Math.cos(botData.currentAngle) * lookAheadDist,
+                y: botPlayer.position.y + Math.sin(botData.currentAngle) * lookAheadDist,
+                radius: 120
+            };
+            
+            // Using the existing bodyTree from GameEngine (if accessible via global or passed)
+            // For now, use a simple segment distance check if tree isn't passed, but the plan mentioned bodyTree.
+            // I will assume I can access the trees if I pass them to update() or if they are on the engine.
+            // Let's modify the update call in GameEngine to pass the trees.
+            
+            if (this.currentBodyTree) {
+                const threats = this.currentBodyTree.query(evasionRange);
+                for (const t of threats) {
+                    if (t.playerId === botId) continue;
+                    // Strong threat detected! Turn away hard.
+                    const angleToThreat = Math.atan2(t.y - botPlayer.position.y, t.x - botPlayer.position.x);
+                    botData.targetAngle = angleToThreat + Math.PI; // Turn 180 degrees away
+                    break;
+                }
+            }
 
+            // 2. Boundary avoidance (hard turn away from edges)
+            const margin = 300;
+            if (botPlayer.position.x < margin) { 
+                botData.targetAngle = 0; // Turn right
+            } else if (botPlayer.position.x > this.world.bounds.width - margin) {
+                botData.targetAngle = Math.PI; // Turn left
+            }
+            
+            if (botPlayer.position.y < margin) {
+                botData.targetAngle = Math.PI / 2; // Turn down
+            } else if (botPlayer.position.y > this.world.bounds.height - margin) {
+                botData.targetAngle = -Math.PI / 2; // Turn up
+            }
+
+            // --- Steering Smoothing ---
+            // Interpolate current angle towards target angle
+            let diff = botData.targetAngle - botData.currentAngle;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            
+            botData.currentAngle += Math.max(-botData.turnSpeed, Math.min(botData.turnSpeed, diff));
+            nextAngle = botData.currentAngle;
 
             // Apply inputs
             this.gameEngine.inputs[botId] = {

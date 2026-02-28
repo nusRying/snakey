@@ -58,8 +58,17 @@ class QuadTree {
     }
 
     for (const p of this.points) {
-      if (this.contains(range, p)) {
-        found.push(p);
+      if (range.radius) {
+        // Circle query
+        const distSq = Math.pow(p.x - range.x, 2) + Math.pow(p.y - range.y, 2);
+        if (distSq <= Math.pow(range.radius + (p.radius || 0), 2)) {
+          found.push(p);
+        }
+      } else {
+        // Rectangle query (AABB)
+        if (this.contains(range, p)) {
+          found.push(p);
+        }
       }
     }
 
@@ -83,11 +92,12 @@ class QuadTree {
   }
 
   intersects(bounds, range) {
+    const r = range.radius || 0;
     return !(
-      range.x - range.radius > bounds.x + bounds.width ||
-      range.x + range.radius < bounds.x ||
-      range.y - range.radius > bounds.y + bounds.height ||
-      range.y + range.radius < bounds.y
+      range.x - r > bounds.x + bounds.width ||
+      range.x + r < bounds.x ||
+      range.y - r > bounds.y + bounds.height ||
+      range.y + r < bounds.y
     );
   }
 }

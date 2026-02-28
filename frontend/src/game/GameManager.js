@@ -17,7 +17,19 @@ export class GameManager {
       ? 'http://localhost:3000' 
       : window.location.origin);
     
-    this.socket = io(serverUrl);
+    console.log('GameManager: Connecting to backend at', serverUrl);
+    this.socket = io(serverUrl, { reconnection: true, reconnectionDelay: 1000, reconnectionAttempts: 5 });
+    
+    // Socket connection event handlers for diagnostics
+    this.socket.on('connect', () => {
+      console.log('GameManager: Socket connected, ID:', this.socket.id);
+    });
+    this.socket.on('disconnect', (reason) => {
+      console.warn('GameManager: Socket disconnected, reason:', reason);
+    });
+    this.socket.on('connect_error', (error) => {
+      console.error('GameManager: Socket connection error:', error);
+    });
     
     this.state = {
       players: {},
@@ -25,17 +37,26 @@ export class GameManager {
       bounds: { width: 3000, height: 3000 }
     };
     
-    this.killFeed = []; // Array of kill events
-    this.activeEmotes = {}; // { playerId: { emoteId, time } }
+    this.killFeed = []; 
+    this.activeEmotes = {}; 
+    this.screenShake = 0; 
+    this.particles = []; // Array of {x, y, vx, vy, life, color}
     
-    this.stateBuffer = []; // Buffer for interpolation
-    this.renderDelay = 100; // Render 100ms in the past
+    this.stateBuffer = []; 
+    this.renderDelay = 150; 
+    this.serverClockOffset = 0;
+    this.hasSyncedClock = false;
+    this.currentLag = 0;
     
     this.myId = null;
     this.input = { angle: 0, isBoosting: false, useAbility: false };
+    this.inputDirty = false;
+    this.lastInputEmit = 0;
     
     this.lastTime = performance.now();
     this.animationFrameId = null;
+    this.loopCount = 0;
+    this.loopError = null;
     
     this.joystick = {
       active: false,
@@ -70,27 +91,47 @@ export class GameManager {
   }
   
   setupNetwork() {
+    console.log('GameManager: setupNetwork called, emitting join_game event');
     // Send our chosen profile immediately
     this.socket.emit('join_game', this.profile);
 
     this.socket.on('init', (data) => {
+      console.log('GameManager: received init event, myId:', data.id);
       this.myId = data.id;
       this.state.bounds = data.bounds;
       if (data.state) {
         // Assume server time if not provided initially
         data.state.time = data.state.time || Date.now();
         this.stateBuffer.push(data.state);
+        if (data.state.pellets) {
+            this.state.pellets = data.state.pellets;
+        }
       }
     });
 
+    this.socket.on('pellet_update', ({ added, removed }) => {
+       if (added) {
+           added.forEach(p => { this.state.pellets[p.id] = p; });
+       }
+       if (removed) {
+           removed.forEach(id => { delete this.state.pellets[id]; });
+       }
+    });
+
     this.socket.on('state', (snapshot) => {
-      // Ensure time exists
-      snapshot.time = snapshot.time || Date.now();
+      const now = Date.now();
+      if (!this.hasSyncedClock) {
+          this.serverClockOffset = now - snapshot.time;
+          this.hasSyncedClock = true;
+          console.log('GameManager: Synced clock, offset:', this.serverClockOffset);
+      }
+      
+      // Calculate network lag for diagnostics (time since last packet)
+      this.currentLag = now - (snapshot.time + this.serverClockOffset);
       
       this.stateBuffer.push(snapshot);
       
-      // Keep only recent snapshots to save memory
-      if (this.stateBuffer.length > 10) {
+      if (this.stateBuffer.length > 50) {
          this.stateBuffer.shift();
       }
     });
@@ -101,7 +142,10 @@ export class GameManager {
         this.killFeed.shift(); // Keep only last 5 kills
       }
       if (eventData.killerId === this.myId) {
-         if (this.audio) this.audio.play('kill');
+         if (this.audio) this.audio.playKill();
+         this.screenShake = 15; // Big shake for your own kills
+      } else {
+         this.screenShake = 5; // Smaller shake for others
       }
     });
 
@@ -125,43 +169,57 @@ export class GameManager {
   }
   
   setupInput() {
-    window.addEventListener('keydown', (e) => {
+    this._keydownHandler = (e) => {
         if (e.code === 'Space') {
             if (!this.input.useAbility) this.audio.playAbility();
             this.input.useAbility = true;
             this.socket.emit('input', this.input);
         }
-    });
-    window.addEventListener('keyup', (e) => {
+        this.handleKeyDown(e);
+    };
+    this._keyupHandler = (e) => {
         if (e.code === 'Space') {
             this.input.useAbility = false;
             this.socket.emit('input', this.input);
         }
-    });
-    
+    };
+    this._mousedownHandler = () => { this.audio.resume(); this.handleMouseDown(); };
+    this._touchstartHandler = (e) => { this.audio.resume(); this.handleTouchStart(e); };
+
+    window.addEventListener('keydown', this._keydownHandler);
+    window.addEventListener('keyup', this._keyupHandler);
     window.addEventListener('mousemove', this.handleMouseMove, { passive: true });
-    window.addEventListener('mousedown', () => { this.audio.resume(); this.handleMouseDown(); });
+    window.addEventListener('mousedown', this._mousedownHandler);
     window.addEventListener('mouseup', this.handleMouseUp);
     window.addEventListener('resize', this.handleResize);
 
     // Mobile touch controls
-    this.canvas.addEventListener('touchstart', (e) => { this.audio.resume(); this.handleTouchStart(e); }, { passive: false });
+    this.canvas.addEventListener('touchstart', this._touchstartHandler, { passive: false });
     this.canvas.addEventListener('touchmove', this.handleTouchMove, { passive: false });
     this.canvas.addEventListener('touchend', this.handleTouchEnd, { passive: false });
     this.canvas.addEventListener('touchcancel', this.handleTouchEnd, { passive: false });
-    window.addEventListener('keydown', this.handleKeyDown);
   }
   
   cleanup() {
-    this.audio.cleanup();
-    this.socket.disconnect();
+    if (this.audio) this.audio.cleanup();
+    if (this.socket) this.socket.disconnect();
     cancelAnimationFrame(this.animationFrameId);
+    
+    window.removeEventListener('keydown', this._keydownHandler);
+    window.removeEventListener('keyup', this._keyupHandler);
     window.removeEventListener('mousemove', this.handleMouseMove);
-    window.removeEventListener('mousedown', this.handleMouseDown);
+    window.removeEventListener('mousedown', this._mousedownHandler);
     window.removeEventListener('mouseup', this.handleMouseUp);
     window.removeEventListener('resize', this.handleResize);
-    window.removeEventListener('keydown', this.handleKeyDown);
+    
+    if (this.canvas) {
+        this.canvas.removeEventListener('touchstart', this._touchstartHandler);
+        this.canvas.removeEventListener('touchmove', this.handleTouchMove);
+        this.canvas.removeEventListener('touchend', this.handleTouchEnd);
+        this.canvas.removeEventListener('touchcancel', this.handleTouchEnd);
+    }
   }
+
 
   selectMutation(mutationId) {
       if (this.socket) {
@@ -197,17 +255,17 @@ export class GameManager {
     const dy = e.clientY - centerY;
     
     this.input.angle = Math.atan2(dy, dx);
-    this.socket.emit('input', this.input);
+    this.inputDirty = true;
   }
 
   handleMouseDown() {
     this.input.isBoosting = true;
-    this.socket.emit('input', this.input);
+    this.inputDirty = true;
   }
 
   handleMouseUp() {
     this.input.isBoosting = false;
-    this.socket.emit('input', this.input);
+    this.inputDirty = true;
   }
 
   handleTouchStart(e) {
@@ -222,7 +280,7 @@ export class GameManager {
           this.boostBtn.active = true;
           this.boostBtn.identifier = touch.identifier;
           this.input.isBoosting = true;
-          this.socket.emit('input', this.input);
+          this.inputDirty = true;
           continue;
       }
       
@@ -234,7 +292,7 @@ export class GameManager {
           this.abilityBtn.active = true;
           this.abilityBtn.identifier = touch.identifier;
           this.input.useAbility = true;
-          this.socket.emit('input', this.input);
+          this.inputDirty = true;
           continue;
       }
 
@@ -292,7 +350,7 @@ export class GameManager {
             this.joystick.stickY = this.joystick.baseY + dy;
             
             this.input.angle = Math.atan2(dy, dx);
-            this.socket.emit('input', this.input);
+            this.inputDirty = true;
         }
     }
   }
@@ -310,13 +368,13 @@ export class GameManager {
             this.boostBtn.active = false;
             this.boostBtn.identifier = null;
             this.input.isBoosting = false;
-            this.socket.emit('input', this.input);
+            this.inputDirty = true;
         }
         if (this.abilityBtn.active && touch.identifier === this.abilityBtn.identifier) {
             this.abilityBtn.active = false;
             this.abilityBtn.identifier = null;
             this.input.useAbility = false;
-            this.socket.emit('input', this.input);
+            this.inputDirty = true;
         }
     }
   }
@@ -327,7 +385,10 @@ export class GameManager {
   }
   
   interpolateState() {
-     const renderTime = Date.now() - this.renderDelay;
+     if (this.stateBuffer.length < 2) return;
+
+     // Calculate the local time in "server world"
+     const renderTime = (Date.now() - this.serverClockOffset) - this.renderDelay;
      
      let s0 = null;
      let s1 = null;
@@ -341,8 +402,8 @@ export class GameManager {
         }
      }
      
-     if (!s0 && this.stateBuffer.length > 0) {
-        // Fallback to latest
+     // Fallback if we have run out of buffer (renderTime is newer than latest snapshot)
+     if (!s0) {
         s0 = this.stateBuffer[this.stateBuffer.length - 1];
         s1 = s0;
      }
@@ -352,28 +413,18 @@ export class GameManager {
         if (s1.time !== s0.time) {
             t = (renderTime - s0.time) / (s1.time - s0.time);
         }
-        
-        // Cap t just in case
         t = Math.max(0, Math.min(1, t));
 
-        this.state.pellets = s0.pellets;
-        
-        // Pass BR props
+        // Copy primitive values directly
+        if (s0.pellets) this.state.pellets = s0.pellets;
         this.state.stormRadius = s0.stormRadius;
         this.state.stormCenter = s0.stormCenter;
-        
-        // Pass Team props
         this.state.teamScores = s0.teamScores;
-        
-        // Pass Hazards
         this.state.blackHoles = s0.blackHoles;
         this.state.wormholes = s0.wormholes;
-        
-        // Pass King
         this.state.kingId = s0.kingId;
-
-        // Pass PowerUps
         this.state.powerUps = s0.powerUps;
+        this.state.bounds = s0.bounds;
         
         const interpolatedPlayers = {};
         for (const id in s0.players) {
@@ -385,50 +436,98 @@ export class GameManager {
                 continue;
             }
             
-            // Deep copy to avoid mutating buffer
-            const interpPlayer = JSON.parse(JSON.stringify(p0));
-            
-            interpPlayer.position.x = p0.position.x + (p1.position.x - p0.position.x) * t;
-            interpPlayer.position.y = p0.position.y + (p1.position.y - p0.position.y) * t;
-            
-            for (let j = 0; j < p0.segments.length; j++) {
-                if (p1.segments[j]) {
-                    interpPlayer.segments[j].x = p0.segments[j].x + (p1.segments[j].x - p0.segments[j].x) * t;
-                    interpPlayer.segments[j].y = p0.segments[j].y + (p1.segments[j].y - p0.segments[j].y) * t;
-                }
+            // Track growth pulse locally
+            const oldPlayer = this.state.players[id];
+            let pulse = oldPlayer ? (oldPlayer.pulse || 0) : 0;
+            if (oldPlayer && p0.mass > oldPlayer.mass) {
+                pulse = 1.0; // Trigger pulse on mass gain
             }
+            pulse *= 0.9; // Fade pulse
+            if (pulse < 0.01) pulse = 0;
+
+            // Create a pseudo-deep copy for interpolation without heavy JSON calls
+            const interpPlayer = { 
+                ...p0,
+                pulse: pulse,
+                position: {
+                    x: p0.position.x + (p1.position.x - p0.position.x) * t,
+                    y: p0.position.y + (p1.position.y - p0.position.y) * t
+                },
+                segments: p0.segments.map((seg, idx) => {
+                    const nextSeg = p1.segments[idx];
+                    if (nextSeg) {
+                        return {
+                            x: seg.x + (nextSeg.x - seg.x) * t,
+                            y: seg.y + (nextSeg.y - seg.y) * t
+                        };
+                    }
+                    return seg;
+                })
+            };
             
-            interpolatedPlayers[id] = interpPlayer;
+            this.state.players[id] = interpPlayer;
+
+            // Emit particles if boosting
+            if (p0.isBoosting && Math.random() < 0.2) {
+                this.particles.push({
+                    x: p0.position.x,
+                    y: p0.position.y,
+                    vx: (Math.random() - 0.5) * 50,
+                    vy: (Math.random() - 0.5) * 50,
+                    life: 1.0,
+                    color: p0.color
+                });
+            }
         }
-        this.state.players = interpolatedPlayers;
-     }
+        
+        // Update particles
+        this.particles.forEach(p => {
+            p.x += p.vx * 0.05;
+            p.y += p.vy * 0.05;
+            p.life -= 0.05;
+        });
+        this.particles = this.particles.filter(p => p.life > 0);
+    }
   }
 
   loop(time) {
-    const dt = (time - this.lastTime) / 1000;
-    this.lastTime = time;
+    try {
+      this.loopCount++;
+      const dt = (time - this.lastTime) / 1000;
+      this.lastTime = time;
+    
+    // Throttle input emission to roughly 20Hz (every 50ms) to prevent freezing the socket map
+    if (this.inputDirty && time - this.lastInputEmit > 50) {
+        if (this.socket) {
+            this.socket.emit('input', this.input);
+        }
+        this.inputDirty = false;
+        this.lastInputEmit = time;
+    }
     
     this.interpolateState();
 
-    // Clear the screen (Black background)
-    this.ctx.fillStyle = '#0a0a0a';
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    
-    // Smooth camera trailing towards the player
-    let cameraX = this.state.bounds.width / 2;
-    let cameraY = this.state.bounds.height / 2;
     const myPlayer = this.state.players[this.myId];
-    
-    if (myPlayer) {
-       cameraX = myPlayer.position.x;
-       cameraY = myPlayer.position.y;
-    }
+    const camX = myPlayer ? myPlayer.position.x : this.state.bounds.width / 2;
+    const camY = myPlayer ? myPlayer.position.y : this.state.bounds.height / 2;
+
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     
     this.ctx.save();
-    this.ctx.translate(this.canvas.width / 2 - cameraX, this.canvas.height / 2 - cameraY);
+    
+    // --- Apply Screen Shake ---
+    if (this.screenShake > 0) {
+        const sx = (Math.random() - 0.5) * this.screenShake;
+        const sy = (Math.random() - 0.5) * this.screenShake;
+        this.ctx.translate(sx, sy);
+        this.screenShake *= 0.9;
+        if (this.screenShake < 0.1) this.screenShake = 0;
+    }
+    
+    this.ctx.translate(this.canvas.width / 2 - camX, this.canvas.height / 2 - camY);
     
     // Render World
-    this.renderer.drawGrid(this.state.bounds, cameraX, cameraY, this.canvas.width, this.canvas.height);
+    this.renderer.drawGrid(this.state.bounds, camX, camY, this.canvas.width, this.canvas.height);
     this.renderer.drawBounds(this.state.bounds);
     
     // If storm exists (Battle Royale), draw it
@@ -446,10 +545,29 @@ export class GameManager {
     this.renderer.drawPellets(this.state.pellets);
     this.renderer.drawPlayers(this.state.players, this.myId, this.state.kingId, this.activeEmotes);
     
+    // Render Particles
+    this.particles.forEach(p => {
+        this.ctx.beginPath();
+        this.ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
+        this.ctx.fillStyle = p.color;
+        this.ctx.globalAlpha = p.life;
+        this.ctx.fill();
+    });
+    this.ctx.globalAlpha = 1.0;
+
     this.ctx.restore();
     
     if (myPlayer) {
        this.renderer.drawHUD(myPlayer, this.canvas.width, this.canvas.height);
+       
+       // Draw Diagnostics
+       this.ctx.fillStyle = 'rgba(0,0,0,0.5)';
+       this.ctx.fillRect(10, this.canvas.height - 60, 250, 50);
+       this.ctx.fillStyle = this.stateBuffer.length < 3 ? '#ff0000' : '#00ff00';
+       this.ctx.font = '12px Courier New';
+       this.ctx.textAlign = 'left';
+       this.ctx.fillText(`${this.loopCount % 2 === 0 ? '●' : '○'} LOOP: ${this.loopCount} | BUF: ${this.stateBuffer.length} | LAG: ${this.currentLag}ms`, 20, this.canvas.height - 40);
+       this.ctx.fillText(`ID: ${this.myId} | POS: ${Math.round(myPlayer.position.x)},${Math.round(myPlayer.position.y)}`, 20, this.canvas.height - 25);
     }
     
     // Clean up old kill feed messages (e.g., > 3 seconds old)
@@ -478,5 +596,32 @@ export class GameManager {
     }
 
     this.animationFrameId = requestAnimationFrame(this.loop);
+    } catch (err) {
+      console.error("CRITICAL GAME LOOP ERROR:", err);
+      this.loopError = err;
+      // Re-throw if it's non-rendering related or if we want to stop
+      // but usually we want to stop and show the error on canvas
+      this.drawErrorOverlay(err);
+    }
+  }
+
+  drawErrorOverlay(err) {
+      this.ctx.fillStyle = 'rgba(150, 0, 0, 0.9)';
+      this.ctx.fillRect(50, 50, this.canvas.width - 100, this.canvas.height - 100);
+      this.ctx.strokeStyle = 'white';
+      this.ctx.lineWidth = 5;
+      this.ctx.strokeRect(50, 50, this.canvas.width - 100, this.canvas.height - 100);
+      
+      this.ctx.fillStyle = 'white';
+      this.ctx.font = 'bold 24px Arial';
+      this.ctx.textAlign = 'center';
+      this.ctx.fillText("CRITICAL LOOP ERROR!", this.canvas.width/2, 100);
+      
+      this.ctx.font = '16px monospace';
+      this.ctx.textAlign = 'left';
+      const lines = (err.stack || err.message).split('\n');
+      lines.slice(0, 20).forEach((line, i) => {
+          this.ctx.fillText(line, 80, 150 + i * 20);
+      });
   }
 }

@@ -92,7 +92,7 @@ class GameEngine {
         socket.emit('init', {
           id: socket.id,
           bounds: this.world.bounds,
-          state: this.world.getSnapshot()
+          state: this.world.getFullSnapshot()
         });
   }
 
@@ -215,10 +215,12 @@ class GameEngine {
     const dt = (now - this.lastTick) / 1000;
     this.lastTick = now;
 
-    // 1. AI Controllers make their moves
-    this.botController.update();
+    const playerCount = Object.keys(this.world.players).length;
+    if (playerCount > 0 && Math.random() < 0.01) {
+        console.log(`[DEBUG] Tick running. Room: ${this.roomId}, Players: ${playerCount}, Pellets: ${Object.keys(this.world.pellets).length}`);
+    }
 
-    // 2. Build QuadTrees
+    // 1. Build QuadTrees
     const qBounds = { x: 0, y: 0, width: this.world.bounds.width, height: this.world.bounds.height };
     const pelletTree = new QuadTree(qBounds, 10);
     const bodyTree = new QuadTree(qBounds, 10);
@@ -234,6 +236,9 @@ class GameEngine {
             bodyTree.insert({ x: seg.x, y: seg.y, playerId: id, radius: p.radius });
         }
     }
+
+    // 2. AI Controllers make their moves (Now with awareness of the world trees)
+    this.botController.update(pelletTree, bodyTree);
 
     const deadPlayers = [];
 
@@ -307,20 +312,37 @@ class GameEngine {
         player.isBoosting = false;
       }
 
-      player.velocity.x = Math.cos(input.angle) * currentSpeed;
-      player.velocity.y = Math.sin(input.angle) * currentSpeed;
+      // Handle Steering (Turn Rate Limit)
+      // Base turn speed: ~5 radians per second (generous)
+      // Larger snakes turn slower: base / (1 + mass/500)
+      const baseTurnSpeed = 5 * (player.mutations.turnSpeed || 1.0);
+      const massTurnFactor = 1 + (player.mass - 50) / 1000;
+      const maxTurnDelta = (baseTurnSpeed / massTurnFactor) * dt;
+      
+      let angleDiff = input.angle - (player.angle || 0);
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      
+      const actualTurn = Math.max(-maxTurnDelta, Math.min(maxTurnDelta, angleDiff));
+      player.angle = (player.angle || 0) + actualTurn;
+      
+      // Update velocity based on limited angle
+      player.velocity.x = Math.cos(player.angle) * currentSpeed;
+      player.velocity.y = Math.sin(player.angle) * currentSpeed;
 
       player.position.x += player.velocity.x * dt;
       player.position.y += player.velocity.y * dt;
 
-      // Soft Bound collisions (bounce back if hit wall)
-      if (player.position.x <= player.radius || player.position.x >= this.world.bounds.width - player.radius) {
-         player.velocity.x *= -1;
-         player.position.x = Math.max(player.radius, Math.min(this.world.bounds.width - player.radius, player.position.x));
-      }
-      if (player.position.y <= player.radius || player.position.y >= this.world.bounds.height - player.radius) {
-         player.velocity.y *= -1;
-         player.position.y = Math.max(player.radius, Math.min(this.world.bounds.height - player.radius, player.position.y));
+      // Hard Boundary collisions (die if hit wall)
+      if (
+        player.position.x <= player.radius || 
+        player.position.x >= this.world.bounds.width - player.radius ||
+        player.position.y <= player.radius || 
+        player.position.y >= this.world.bounds.height - player.radius
+      ) {
+         console.log(`[DEBUG] Player ${player.name} (${id}) DIED: Hit wall at ${Math.round(player.position.x)},${Math.round(player.position.y)}`);
+         deadPlayers.push({ id, killerId: null });
+         continue; 
       }
 
       // Battle Royale Storm Damage
@@ -412,7 +434,7 @@ class GameEngine {
 
       this.updateSegments(player);
       
-      const targetSegments = Math.floor(player.mass / 10);
+      const targetSegments = Math.floor(player.mass / 5);
       if (player.segments.length < targetSegments) {
          const tail = player.segments.length > 0 ? player.segments[player.segments.length - 1] : player.position;
          player.segments.push({ x: tail.x, y: tail.y });
@@ -423,8 +445,8 @@ class GameEngine {
       // Update player radius slightly based on mass (caps at 30)
        player.radius = Math.min(30, 10 + Math.sqrt(player.mass));
 
-       // Check Mutation Milestones (Every 1000 mass)
-       const nextMilestone = player.lastMilestone + 1000;
+       // Check Mutation Milestones (Every 100 mass)
+       const nextMilestone = player.lastMilestone + 100;
        if (player.mass >= nextMilestone) {
            player.lastMilestone = nextMilestone;
            player.mutationPoints++;
@@ -461,6 +483,7 @@ class GameEngine {
            const dist = Math.sqrt(dx * dx + dy * dy);
            
            if (dist < player.radius + p.radius) {
+              console.log(`[DEBUG] Player ${player.name} EATING pellet ${p.pelletId}. New Mass: ${player.mass + pellet.value}`);
               let gain = pellet.value * (player.mutations.massGain || 1.0);
               if (player.activePowerUps['FRENZY']) gain *= 1.5;
               player.mass += gain;
@@ -478,7 +501,10 @@ class GameEngine {
       let hit = false;
       let killerId = null;
       
-      if (!(player.ability.isActive && player.ability.type === 'SHIELD')) {
+      const isShielded = (player.ability.isActive && player.ability.type === 'SHIELD') || player.activePowerUps['SHIELD'];
+      const isGhost = player.activePowerUps['GHOST'];
+
+      if (!isShielded && !isGhost) {
           for (const b of nearbyBodies) {
               if (b.playerId === id) continue; // Don't collide with self
     
@@ -566,7 +592,14 @@ class GameEngine {
     }
     this.world.kingId = newKingId;
 
+    // 7. Emit State (Lag optimized - pellets omitted)
     this.io.to(this.roomId).emit('state', this.world.getSnapshot());
+
+    // 8. Emit Pellet Deltas
+    const pelletDeltas = this.world.getPelletUpdate();
+    if (pelletDeltas.added.length > 0 || pelletDeltas.removed.length > 0) {
+        this.io.to(this.roomId).emit('pellet_update', pelletDeltas);
+    }
   }
 
   updateSegments(player) {

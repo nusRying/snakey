@@ -1,0 +1,6 @@
+﻿
+> backend@1.0.0 start
+> node index.js
+
+Snake.io Backend listening on port 3000
+Connected to SQLite database.

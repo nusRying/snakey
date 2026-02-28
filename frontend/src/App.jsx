@@ -9,9 +9,12 @@ function App() {
   const [lastMatchStats, setLastMatchStats] = useState(null);
 
   const handlePlay = (loadedProfile) => {
+    console.log('App: handlePlay triggered with profile:', loadedProfile);
+    alert('Starting game with profile: ' + loadedProfile.name);
     setProfile(loadedProfile);
     setLastMatchStats(null);
   };
+
 
   const handleGameOver = (xpEarned) => {
      const result = ProfileManager.addXP(xpEarned);
@@ -33,5 +36,6 @@ function App() {
     </div>
   );
 }
+
 
 export default App;

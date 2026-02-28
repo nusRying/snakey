@@ -10,6 +10,8 @@ class WorldState {
     this.wormholes = this.generateWormholes(2); // 2 pairs
     this.powerUps = {};
     this.powerUpIdCounter = 0;
+    
+    this.pelletUpdates = { added: [], removed: [] };
   }
 
   generateBlackHoles(count) {
@@ -101,31 +103,48 @@ class WorldState {
   spawnPellets(count) {
     for (let i = 0; i < count; i++) {
       const id = this.pelletIdCounter++;
-      this.pellets[id] = {
-        id,
-        x: Math.random() * this.bounds.width,
-        y: Math.random() * this.bounds.height,
-        value: 2,
-        color: `hsl(${~~(Math.random() * 360)}, 100%, 75%)`,
-      };
+        const p = {
+          id,
+          x: Math.random() * this.bounds.width,
+          y: Math.random() * this.bounds.height,
+          value: 2,
+          color: `hsl(${~~(Math.random() * 360)}, 100%, 75%)`,
+        };
+        this.pellets[id] = p;
+        this.pelletUpdates.added.push(p);
+      }
     }
-  }
+  
+    removePellet(id) {
+      if (this.pellets[id]) {
+          this.pelletUpdates.removed.push(id);
+          delete this.pellets[id];
+      }
+    }
 
-  removePellet(id) {
-    delete this.pellets[id];
-  }
-
-  getSnapshot() {
-    return {
+    getPelletUpdate() {
+        const update = { ...this.pelletUpdates };
+        this.pelletUpdates = { added: [], removed: [] }; // Reset
+        return update;
+    }
+  
+    getSnapshot() {
+      return {
       time: Date.now(),
       players: this.players,
-      pellets: this.pellets,
       bounds: this.bounds,
       blackHoles: this.blackHoles,
       wormholes: this.wormholes,
       kingId: this.kingId,
       powerUps: this.powerUps
     };
+  }
+
+  getFullSnapshot() {
+      return {
+          ...this.getSnapshot(),
+          pellets: this.pellets
+      };
   }
 }
 
@@ -142,6 +161,7 @@ class Player {
        this.score = 0;
        this.isBoosting = false;
        this.color = `hsl(${~~(Math.random() * 360)}, 100%, 60%)`;
+       this.angle = Math.random() * Math.PI * 2;
        this.ability = {
          type: ['DASH', 'SHIELD', 'MAGNET'][Math.floor(Math.random() * 3)],
           isActive: false, cooldown: 0, maxCooldown: 5000, duration: 0, maxDuration: 2000

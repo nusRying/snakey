@@ -7,6 +7,43 @@
     <title>frontend</title>
   </head>
   <body>
+    <div
+      id="error-log"
+      style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 9999;
+        color: red;
+        background: black;
+        font-family: monospace;
+        white-space: pre-wrap;
+        padding: 10px;
+      "
+    ></div>
+    <script>
+      window.onerror = function (msg, url, lineNo, columnNo, error) {
+        var str =
+          "Error: " +
+          msg +
+          "\nURL: " +
+          url +
+          "\nLine: " +
+          lineNo +
+          "\nColumn: " +
+          columnNo +
+          "\nError object: " +
+          JSON.stringify(error) +
+          "\nStack: " +
+          (error && error.stack);
+        document.getElementById("error-log").innerText += "\n" + str;
+        return false;
+      };
+      window.addEventListener("unhandledrejection", function (event) {
+        document.getElementById("error-log").innerText +=
+          "\nUnhandled promise rejection: " + event.reason;
+      });
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

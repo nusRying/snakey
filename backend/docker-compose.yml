@@ -1,0 +1,11 @@
+services:
+  snakey-backend:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./database.sqlite:/usr/src/app/database.sqlite
+    restart: always
+    environment:
+      - NODE_ENV=production
+      - PORT=3000

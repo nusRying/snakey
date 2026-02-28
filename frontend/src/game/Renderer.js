@@ -136,8 +136,9 @@ export class Renderer {
           this.ctx.lineWidth = 2;
           this.ctx.stroke();
           this.ctx.restore();
-      }
-      this.ctx.globalAlpha = 1.0;
+    }
+    this.ctx.restore();
+    this.ctx.globalAlpha = 1.0;
   }
 
   drawPowerUps(powerUps, time) {
@@ -229,11 +230,12 @@ export class Renderer {
       
       // Draw Head
       this.ctx.beginPath();
-      this.ctx.arc(p.position.x, p.position.y, p.radius * 1.05, 0, Math.PI * 2);
+      const visualRadius = p.radius * (1.05 + (p.pulse || 0) * 0.3);
+      this.ctx.arc(p.position.x, p.position.y, visualRadius, 0, Math.PI * 2);
       this.ctx.fillStyle = isMe ? '#ffffff' : (p.isBoosting ? '#fff' : p.color);
       
       // Head Glow
-      this.ctx.shadowBlur = 25;
+      this.ctx.shadowBlur = 25 + (p.pulse || 0) * 30;
       this.ctx.shadowColor = isMe ? '#ffffff' : p.color;
       
       this.ctx.fill();

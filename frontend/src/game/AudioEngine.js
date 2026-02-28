@@ -90,4 +90,11 @@ export class AudioEngine {
     osc.start();
     osc.stop(this.ctx.currentTime + 0.5);
   }
+
+  cleanup() {
+    if (this.ctx && this.ctx.state !== 'closed') {
+      this.ctx.close();
+    }
+  }
 }
+
