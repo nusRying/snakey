@@ -1,15 +1,16 @@
 FROM node:18-alpine
 
+# Install build tools for native modules (sqlite3)
+RUN apk add --no-cache python3 make g++
+
 # Create app directory
 WORKDIR /usr/src/app
 
 # Install app dependencies
-# A wildcard is used to ensure both package.json AND package-lock.json are copied
 COPY package*.json ./
-
 RUN npm install --production
 
-# Bundle app source
+# Bundle app source (node_modules excluded via .dockerignore)
 COPY . .
 
 # Expose the port the app runs on
