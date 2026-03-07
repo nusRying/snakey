@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-typecheck:
+    name: Lint & TypeCheck
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci --legacy-peer-deps
+
+      - name: Install backend dependencies
+        run: cd backend && npm ci --legacy-peer-deps
+
+      - name: Frontend - TypeCheck
+        run: cd frontend && npm run typecheck
+
+      - name: Backend - TypeCheck
+        run: cd backend && npm run typecheck
+
+      - name: Frontend - Lint
+        run: cd frontend && npm run lint
+
+      - name: Backend - Lint
+        run: cd backend && npm run lint
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci --legacy-peer-deps
+
+      - name: Install backend dependencies
+        run: cd backend && npm ci --legacy-peer-deps
+
+      - name: Frontend - Test
+        run: cd frontend && npm test run
+
+      - name: Backend - Test
+        run: cd backend && npm test run
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck, test]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: cd frontend && npm ci --legacy-peer-deps
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Upload frontend build
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/dist

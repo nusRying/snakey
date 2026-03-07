@@ -1,0 +1,98 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Snakey Backend",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"backend/index.js"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Run Snakey Frontend",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"--prefix",
+				"frontend",
+				"run",
+				"dev",
+				"--",
+				"--host",
+				"127.0.0.1"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Run Snakey Frontend Shell",
+			"type": "shell",
+			"command": "Set-Location \"frontend\"; npm run dev -- --host=127.0.0.1",
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Run Snakey Frontend Explicit Root",
+			"type": "shell",
+			"command": "npx vite frontend --config frontend/vite.config.js --host 127.0.0.1 --port 4173",
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Run Snakey Backend Workspace",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"start",
+				"--workspace",
+				"backend"
+			],
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Run Snakey Backend Shell",
+			"type": "shell",
+			"command": "Set-Location \"backend\"; npm start",
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Snakey Root Typecheck",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"typecheck"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Snakey Frontend Tests",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"test",
+				"--workspace",
+				"frontend"
+			],
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Run Snakey Backend Correct",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"backend/index.js"
+			],
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}

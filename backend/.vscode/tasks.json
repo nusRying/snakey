@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Backend Clean",
+			"type": "shell",
+			"command": "node",
+			"args": [
+				"index.js"
+			],
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}

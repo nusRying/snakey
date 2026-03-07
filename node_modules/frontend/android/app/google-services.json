@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "522358344704",
+    "project_id": "snakey-32e9c",
+    "storage_bucket": "snakey-32e9c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:522358344704:android:9e96129c85e04abac5dce5",
+        "android_client_info": {
+          "package_name": "com.umair.snakey.game"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "522358344704-b8dvkonmpt5tfhg7pll15b8a1gioood1.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB5Tfshve_sHBFgQDWbSnJqzB7ND5xkrIs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "522358344704-b8dvkonmpt5tfhg7pll15b8a1gioood1.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

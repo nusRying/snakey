@@ -1,0 +1,45 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="snakey-bg" x1="80" y1="64" x2="432" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#08111F" />
+      <stop offset="1" stop-color="#190B31" />
+    </linearGradient>
+    <linearGradient id="snakey-body" x1="132" y1="115" x2="385" y2="392" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6EE7F9" />
+      <stop offset="0.52" stop-color="#7C3AED" />
+      <stop offset="1" stop-color="#F43F5E" />
+    </linearGradient>
+    <linearGradient id="snakey-belly" x1="169" y1="142" x2="340" y2="330" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8FBFF" />
+      <stop offset="1" stop-color="#FDA4AF" />
+    </linearGradient>
+    <radialGradient id="snakey-glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(185 155) rotate(46.7) scale(265 244)">
+      <stop stop-color="#3DD9FF" stop-opacity="0.42" />
+      <stop offset="1" stop-color="#3DD9FF" stop-opacity="0" />
+    </radialGradient>
+    <filter id="snakey-shadow" x="73" y="74" width="367" height="362" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix" />
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha" />
+      <feOffset dy="14" />
+      <feGaussianBlur stdDeviation="18" />
+      <feComposite in2="hardAlpha" operator="out" />
+      <feColorMatrix type="matrix" values="0 0 0 0 0.0156863 0 0 0 0 0.0392157 0 0 0 0 0.101961 0 0 0 0.6 0" />
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1" />
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape" />
+    </filter>
+  </defs>
+  <rect x="28" y="28" width="456" height="456" rx="116" fill="url(#snakey-bg)" />
+  <rect x="28" y="28" width="456" height="456" rx="116" stroke="#FFFFFF" stroke-opacity="0.08" />
+  <circle cx="172" cy="154" r="150" fill="url(#snakey-glow)" />
+  <circle cx="386" cy="120" r="18" fill="#F8FAFC" fill-opacity="0.82" />
+  <circle cx="386" cy="120" r="10" fill="#F43F5E" />
+  <g filter="url(#snakey-shadow)">
+    <path d="M158 138C183 110 223 104 265 114C312 126 343 158 345 195C347 234 318 265 274 268H219C187 268 162 289 162 319C162 350 187 373 220 379C254 385 291 378 324 360C349 346 369 325 383 298" stroke="url(#snakey-body)" stroke-width="66" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M166 143C189 118 225 114 261 122C302 132 329 159 331 194C333 228 307 254 271 255H220C178 255 146 284 146 321C146 359 175 392 219 399C264 406 308 396 345 373" stroke="url(#snakey-belly)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" opacity="0.88" />
+  </g>
+  <path d="M330 175C330 150 350 131 375 131C400 131 420 150 420 175C420 200 400 220 375 220H353C340 220 330 209 330 196V175Z" fill="url(#snakey-body)" />
+  <circle cx="390" cy="169" r="10" fill="#04111A" />
+  <circle cx="394" cy="165" r="3.5" fill="#F8FAFC" />
+  <path d="M347 190C352 201 361 208 373 211" stroke="#F8FAFC" stroke-width="7" stroke-linecap="round" opacity="0.82" />
+  <path d="M322 306C338 300 351 289 361 275" stroke="#7DD3FC" stroke-width="14" stroke-linecap="round" opacity="0.72" />
+</svg>

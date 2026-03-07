@@ -1,0 +1,15 @@
+{
+  "name": "snakey",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspaces",
+    "format": "npm run format --workspaces",
+    "typecheck": "npm run typecheck --workspace frontend && npm run typecheck --workspace backend",
+    "test": "npm run test --workspace frontend && npm run test --workspace backend",
+    "test:watch": "npm run test:watch --workspaces --if-present"
+  }
+}
