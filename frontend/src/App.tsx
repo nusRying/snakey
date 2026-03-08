@@ -22,6 +22,8 @@ import OptionsScreen from './components/OptionsScreen';
 import HelpScreen from './components/HelpScreen';
 import IntroCinematic from './components/IntroCinematic';
 import SkinLabScreen from './components/SkinLabScreen';
+import BootLoadingScreen from './components/BootLoadingScreen';
+import { createInitialBootState, warmAppBoot } from './game/BootLoader';
 import './index.css';
 import { isNativeAndroid } from './platform/android';
 
@@ -117,12 +119,27 @@ function App() {
   });
 
   const [screen, setScreen] = useState<Screen>('intro');
+  const [bootState, setBootState] = useState(createInitialBootState);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [lastMatchStats, setLastMatchStats] = useState<MatchStats | null>(null);
   const [skinLabReturnScreen, setSkinLabReturnScreen] = useState<'title' | 'lobby'>('title');
   const [performancePreset, setPerformancePreset] = useState<'adaptive' | 'ultra'>(
     () => ((ProfileManager.getProfile() as Profile).performancePreset === 'ultra' ? 'ultra' : 'adaptive')
   );
+
+  useEffect(() => {
+    let active = true;
+
+    void warmAppBoot((nextState) => {
+      if (active) {
+        setBootState(nextState);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     initThirdPartyAnalytics();
@@ -235,6 +252,10 @@ function App() {
     setSkinLabReturnScreen('title');
     setScreen('skins');
   };
+
+  if (!bootState.ready) {
+    return <BootLoadingScreen bootState={bootState} />;
+  }
 
   const handleOpenSkinsFromLobby = () => {
     setSkinLabReturnScreen('lobby');

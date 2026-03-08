@@ -6,6 +6,8 @@
     "frontend"
   ],
   "scripts": {
+    "dev:backend": "npm start --workspace backend",
+    "dev:frontend": "npm run dev --workspace frontend -- --host 127.0.0.1 --port 4173",
     "lint": "npm run lint --workspaces",
     "format": "npm run format --workspaces",
     "typecheck": "npm run typecheck --workspace frontend && npm run typecheck --workspace backend",

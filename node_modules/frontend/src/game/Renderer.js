@@ -7,6 +7,17 @@ export class Renderer {
     this.isMobile =
       /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || 'ontouchstart' in window;
     this.lowEffects = this.isMobile || window.innerWidth < 1000;
+    this.skipBodyPatterns = this.lowEffects;
+    this.maxVisiblePellets = this.lowEffects ? (this.isMobile ? 140 : 220) : 420;
+  }
+
+  isCircleVisible(x, y, radius, minX, maxX, minY, maxY, margin = 0) {
+    return !(
+      x + radius + margin < minX ||
+      x - radius - margin > maxX ||
+      y + radius + margin < minY ||
+      y - radius - margin > maxY
+    )
   }
 
   hexToRgba(hex, alpha) {
@@ -598,17 +609,21 @@ export class Renderer {
     const maxX = camX + viewWidth / 2 + margin;
     const minY = camY - viewHeight / 2 - margin;
     const maxY = camY + viewHeight / 2 + margin;
+    let renderedPellets = 0;
+    const pelletLimit = Number.isFinite(this.maxVisiblePellets) ? this.maxVisiblePellets : Infinity;
 
     for (const id in pellets) {
       const p = pellets[id];
       // Skip pellets outside view
       if (p.x < minX || p.x > maxX || p.y < minY || p.y > maxY) continue;
+      if (renderedPellets >= pelletLimit) break;
 
       this.ctx.beginPath();
       this.ctx.arc(p.x, p.y, p.value * 1.5, 0, Math.PI * 2);
       this.ctx.fillStyle = p.color;
       // Shadow removed for pellets to improve performance
       this.ctx.fill();
+      renderedPellets += 1;
     }
   }
 
@@ -659,6 +674,10 @@ export class Renderer {
         const sizeCoef = 1 - (i / Math.max(1, p.segments.length)) * 0.4;
         const radius = p.radius * sizeCoef;
 
+        if (!this.isCircleVisible(seg.x, seg.y, radius, minX, maxX, minY, maxY, 140)) {
+          continue;
+        }
+
         this.ctx.beginPath();
         this.ctx.arc(seg.x, seg.y, radius, 0, Math.PI * 2);
 
@@ -674,17 +693,19 @@ export class Renderer {
             this.ctx.shadowBlur = isMe ? 15 : 5;
             this.ctx.shadowColor = playerColor;
           }
-          this.ctx.fillStyle = this.createSkinFill(seg.x, seg.y, radius, skin, time);
+          this.ctx.fillStyle = this.lowEffects ? skin.baseColor : this.createSkinFill(seg.x, seg.y, radius, skin, time);
         }
 
         this.ctx.fill();
-        this.ctx.strokeStyle = 'rgba(0,0,0,0.3)'; // Slightly more transparent stroke
-        this.ctx.lineWidth = 1.5;
-        this.ctx.stroke();
+        if (!this.lowEffects || isMe || isKing) {
+          this.ctx.strokeStyle = 'rgba(0,0,0,0.3)'; // Slightly more transparent stroke
+          this.ctx.lineWidth = 1.5;
+          this.ctx.stroke();
+        }
 
         if (!(p.isBoosting || (p.ability.isActive && p.ability.type === 'DASH'))) {
           const shouldDrawPattern =
-            !this.lowEffects || i === 0 || i === p.segments.length - 1 || i % overlayFrequency === 0
+            !this.skipBodyPatterns && (!this.lowEffects || i === 0 || i === p.segments.length - 1 || i % overlayFrequency === 0)
           if (shouldDrawPattern) {
             this.drawSkinOverlay(seg.x, seg.y, radius, skin, 0, time, i === 0 ? 1 : 0.82)
           }
@@ -702,7 +723,11 @@ export class Renderer {
       this.ctx.beginPath();
       const visualRadius = p.radius * (1.05 + (p.pulse || 0) * 0.3);
       this.ctx.arc(p.position.x, p.position.y, visualRadius, 0, Math.PI * 2);
-      this.ctx.fillStyle = p.isBoosting ? '#fff' : this.createSkinFill(p.position.x, p.position.y, visualRadius, skin, time, true);
+      this.ctx.fillStyle = p.isBoosting
+        ? '#fff'
+        : this.lowEffects && !isMe && !isKing
+          ? skin.baseColor
+          : this.createSkinFill(p.position.x, p.position.y, visualRadius, skin, time, true);
 
       // Head Glow only for self or king
       if (!this.isMobile && (isMe || isKing)) {
@@ -713,7 +738,7 @@ export class Renderer {
       this.ctx.fill();
       this.ctx.shadowBlur = 0;
 
-      if (!p.isBoosting) {
+      if (!p.isBoosting && (!this.lowEffects || isMe || isKing)) {
         this.drawSkinOverlay(p.position.x, p.position.y, visualRadius, skin, angle, time, 1.1)
       }
 

@@ -8,13 +8,17 @@ type LoadingScreenProps = {
   target?: string;
   detail?: string | null;
   health?: string | null;
+  copy?: string;
 };
 
-const LoadingScreen = ({ status, onRetry, target, detail, health }: LoadingScreenProps) => {
+const LoadingScreen = ({ status, onRetry, target, detail, health, copy }: LoadingScreenProps) => {
   let message = '';
   switch (status) {
     case 'connecting':
       message = 'Connecting to server…';
+      break;
+    case 'syncing':
+      message = 'Loading arena…';
       break;
     case 'reconnecting':
       message = 'Reconnecting…';
@@ -36,7 +40,7 @@ const LoadingScreen = ({ status, onRetry, target, detail, health }: LoadingScree
         <div className="loading-kicker">Snakey Network</div>
         <p className="loading-message">{message}</p>
         <p className="loading-copy">
-          The arena is syncing the room state, player snapshots, and touch controls.
+          {copy || 'The arena is syncing the room state, player snapshots, and touch controls.'}
         </p>
         {target && <p className="loading-target">Target: {target}</p>}
         {health && <p className="loading-target">Probe: {health}</p>}

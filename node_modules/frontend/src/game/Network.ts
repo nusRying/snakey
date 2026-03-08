@@ -108,6 +108,9 @@ type NetworkGameManager = {
   serverMetrics?: Record<string, unknown>;
   roomStatus?: RoomStatus | null;
   io?: { emit: (event: string, payload: unknown) => void };
+  hasInitialWorldState: boolean;
+  hasLiveWorldState: boolean;
+  applySnapshotState: (snapshot: Record<string, unknown> | null | undefined) => void;
 };
 
 // attach socket event handlers to the provided game manager instance
@@ -132,10 +135,9 @@ export function setupNetwork(game: NetworkGameManager): void {
     game.state.bounds = data.bounds;
     if (data.state) {
       data.state.time = data.state.time || Date.now();
+      game.applySnapshotState(data.state);
       game.stateBuffer.push(data.state);
-      if (data.state.pellets) {
-        game.state.pellets = data.state.pellets;
-      }
+      game.hasInitialWorldState = true;
     }
   });
 
@@ -192,6 +194,7 @@ export function setupNetwork(game: NetworkGameManager): void {
       }
     }
     game.lastSnapshotTime = snapshot.time;
+    game.hasLiveWorldState = true;
     if (game.stateBuffer.length === 0) {
       const samplePlayer = Object.values(snapshot.players)[0];
       console.log(

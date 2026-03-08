@@ -169,17 +169,31 @@ From the repo root:
 npm install
 ```
 
-Frontend dev server:
+Recommended VS Code task flow:
+
+- Run `Run Snakey Dev Stack` for the standard local loop.
+- If you want separate terminals, run `Run Snakey Backend` and `Run Snakey Frontend` individually.
+
+Equivalent clean commands from the repo root:
 
 ```bash
-npm run dev --workspace frontend
+npm run dev:backend
 ```
-
-Backend server from the repo root:
 
 ```bash
-node backend/index.js
+npm run dev:frontend
 ```
+
+Local dev targets:
+
+- Frontend dev server: `http://127.0.0.1:4173`
+- Backend dev server: `http://127.0.0.1:3210`
+
+Notes for the local loop:
+
+- The backend now defaults to port `3210` in local development to avoid collisions with other apps commonly using port `3000`.
+- The frontend dev server now uses fixed port `4173` with strict binding so the URL does not drift between runs.
+- For physical-device Android builds, continue using `frontend/.env.production.local` for the device-reachable backend URL.
 
 Backend tests:
 
@@ -204,7 +218,7 @@ Optional backend debug logging on Windows PowerShell:
 
 ```powershell
 $env:SNAKEY_DEBUG="true"
-node backend/index.js
+npm run dev:backend
 ```
 
 ## Android Build Workflow
@@ -299,13 +313,28 @@ frontend/android/app/build/outputs/apk/debug/app-debug.apk
 - The backend has been validated through tests, but startup in the editor terminal history has shown noisy or ambiguous failures and should be treated carefully during local debugging.
 - True universal 144 FPS is not guaranteed across all devices.
 
-## Immediate Next Steps
+## Current Execution Plan
 
-1. Continue device playtesting for input feel, frame pacing, and camera smoothness on phone hardware.
-2. If further smoothness is needed, reduce in-frame draw cost in `frontend/src/game/Renderer.js`, especially HUD, minimap, and effect paths.
-3. Continue tuning world colors, snake presentation, and gameplay readability to align more closely with the desired slither-style vibrancy.
-4. Keep validating Android builds on physical devices after each gameplay/rendering pass.
-5. Improve backend local startup ergonomics so frontend + backend launch is consistently repeatable from a clean shell.
+We are no longer treating the remaining work as one large backlog batch. The operating rule is:
+
+1. Pick one scoped improvement.
+2. Implement only that item.
+3. Validate it locally.
+4. Hand it off for device/user testing.
+5. Finalize it before starting the next item.
+
+Current gated sequence:
+
+1. Stabilize local startup ergonomics so frontend + backend launch cleanly from a fresh shell and the test loop is repeatable.
+2. Run a focused gameplay-feel pass on phone hardware for steering response, frame pacing, camera smoothness, and reconnect behavior.
+3. If gameplay still feels heavy, reduce renderer draw cost in `frontend/src/game/Renderer.js`, prioritizing HUD, minimap, and transient effect paths.
+4. Run a readability/art pass for world contrast, snake clarity, pickup visibility, and overall slither-style vibrancy.
+5. Re-run Android packaging and physical-device regression validation after the accepted gameplay/rendering changes.
+
+Current item to complete first:
+
+- Improve backend/frontend local startup ergonomics and make the run path reliable enough that each later gameplay pass starts from the same clean baseline.
+- Exit criteria: both sides start from the documented VS Code tasks or equivalent clean commands, the lobby is reachable without manual recovery steps, and the workflow is simple enough to repeat before every test round.
 
 ## Related Docs
 

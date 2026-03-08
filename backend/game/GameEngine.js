@@ -322,7 +322,12 @@ class GameEngine {
   }
 
   handleInput(id, data) {
-    this.inputs[id] = data;
+    const previousInput = this.inputs[id] || { angle: 0, isBoosting: false, useAbility: false };
+    this.inputs[id] = {
+      ...previousInput,
+      ...data,
+      useAbility: Boolean(previousInput.useAbility || data?.useAbility),
+    };
   }
 
   die(id, killerId, cause = 'collision') {
@@ -541,6 +546,7 @@ class GameEngine {
         player.ability.isActive = true;
         player.ability.duration = player.ability.maxDuration;
         player.ability.cooldown = player.ability.maxCooldown;
+        input.useAbility = false;
       }
 
       // Update Power-Up Timers

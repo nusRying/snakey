@@ -2,11 +2,21 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "Run Snakey Dev Stack",
+			"dependsOn": [
+				"Run Snakey Backend",
+				"Run Snakey Frontend"
+			],
+			"dependsOrder": "parallel",
+			"group": "build"
+		},
+		{
 			"label": "Run Snakey Backend",
 			"type": "shell",
-			"command": "node",
+			"command": "npm",
 			"args": [
-				"backend/index.js"
+				"run",
+				"dev:backend"
 			],
 			"isBackground": true,
 			"group": "build"
@@ -16,13 +26,8 @@
 			"type": "shell",
 			"command": "npm",
 			"args": [
-				"--prefix",
-				"frontend",
 				"run",
-				"dev",
-				"--",
-				"--host",
-				"127.0.0.1"
+				"dev:frontend"
 			],
 			"isBackground": true,
 			"group": "build"

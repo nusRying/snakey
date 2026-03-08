@@ -294,6 +294,38 @@ class WorldState {
     return powerUps;
   }
 
+  serializeObstacles() {
+    return (this.obstacles || []).map((obstacle) => ({
+      id: obstacle.id,
+      x: this.roundNumber(obstacle.x),
+      y: this.roundNumber(obstacle.y),
+      width: this.roundNumber(obstacle.width),
+      height: this.roundNumber(obstacle.height),
+      style: obstacle.style || 'maze_wall',
+    }));
+  }
+
+  serializeBlackHoles() {
+    return (this.blackHoles || []).map((blackHole) => ({
+      x: this.roundNumber(blackHole.x),
+      y: this.roundNumber(blackHole.y),
+      radius: this.roundNumber(blackHole.radius, 0),
+      pullRadius: this.roundNumber(blackHole.pullRadius, 0),
+      pullStrength: this.roundNumber(blackHole.pullStrength, 0),
+    }));
+  }
+
+  serializeWormholes() {
+    return (this.wormholes || []).map((wormhole) => ({
+      id: wormhole.id,
+      x: this.roundNumber(wormhole.x),
+      y: this.roundNumber(wormhole.y),
+      radius: this.roundNumber(wormhole.radius, 0),
+      targetId: wormhole.targetId,
+      color: wormhole.color,
+    }));
+  }
+
   serializeSegments(segments = [], limit = 0) {
     if (!Array.isArray(segments) || segments.length === 0 || limit <= 0) {
       return [];
@@ -428,6 +460,9 @@ class WorldState {
       time: Date.now(),
       players: this.serializePlayers(),
       bounds: this.bounds,
+      obstacles: this.serializeObstacles(),
+      blackHoles: this.serializeBlackHoles(),
+      wormholes: this.serializeWormholes(),
       stormRadius: this.stormRadius,
       stormCenter: this.stormCenter,
       teamScores: this.teamScores,
@@ -448,6 +483,9 @@ class WorldState {
       time: Date.now(),
       players: this.serializePlayersForViewer(viewerId, options),
       bounds: this.bounds,
+      obstacles: this.serializeObstacles(),
+      blackHoles: this.serializeBlackHoles(),
+      wormholes: this.serializeWormholes(),
       stormRadius: this.stormRadius,
       stormCenter: this.stormCenter,
       teamScores: this.teamScores,

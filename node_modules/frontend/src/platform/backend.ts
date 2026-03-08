@@ -1,6 +1,10 @@
 import { Capacitor } from '@capacitor/core';
 
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1']);
+const DEFAULT_DEV_BACKEND_PORT = '3210';
+const DEFAULT_WEB_DEV_BACKEND_URL = `http://127.0.0.1:${DEFAULT_DEV_BACKEND_PORT}`;
+const DEFAULT_NATIVE_BACKEND_URL = `http://localhost:${DEFAULT_DEV_BACKEND_PORT}`;
+const DEFAULT_ANDROID_EMULATOR_BACKEND_URL = `http://10.0.2.2:${DEFAULT_DEV_BACKEND_PORT}`;
 
 type SnakeyRuntimeConfig = {
   backendUrl?: string;
@@ -51,14 +55,14 @@ export function getBackendBaseUrl() {
 
   if (Capacitor.isNativePlatform()) {
     if (Capacitor.getPlatform() === 'android') {
-      return 'http://10.0.2.2:3000';
+      return DEFAULT_ANDROID_EMULATOR_BACKEND_URL;
     }
 
-    return 'http://localhost:3000';
+    return DEFAULT_NATIVE_BACKEND_URL;
   }
 
   return LOCAL_HOSTNAMES.has(window.location.hostname)
-    ? 'http://localhost:3000'
+    ? DEFAULT_WEB_DEV_BACKEND_URL
     : window.location.origin;
 }
 

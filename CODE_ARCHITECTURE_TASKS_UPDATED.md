@@ -4,6 +4,8 @@ This file is a practical, step-by-step playbook to implement improvements across
 
 Each section below contains concrete steps, commands, and short examples you can follow or copy into PRs. Use it as an ongoing checklist and update it as you progress.
 
+Status note: several foundation items in this document were already completed in the repo after the original plan was written. Treat this file as a backlog/reference guide, while the README holds the current gated execution order.
+
 ---
 
 ## Goals (one-liner)
@@ -16,15 +18,23 @@ Each section below contains concrete steps, commands, and short examples you can
 
 ---
 
-## Recommended order (first sprint)
-1. TypeScript scaffolding + `typecheck` script
-2. ESLint + Prettier configuration and autofix
-3. Extract `backend/game/Physics.js` (pure functions) + unit tests
-4. Add Vitest to frontend + one interpolation test
-5. Create a RoomManager and basic lobby flows
-6. Add CI job for lint/typecheck/tests
+## Execution Model
+1. Take one scoped improvement at a time.
+2. Implement and validate only that item.
+3. Hand it off for manual gameplay/device testing.
+4. Finalize the accepted result.
+5. Only then move to the next item.
 
-Target: get a single end-to-end PR path with tests and CI green within 1–2 weeks.
+This prevents the project from mixing feel changes, rendering changes, UX work, and platform work in one pass, which makes testing ambiguous.
+
+## Current prioritized sequence
+1. Stabilize local startup ergonomics and the repeatable test loop.
+2. Tune gameplay feel on real phone hardware.
+3. Optimize renderer cost only where the gameplay pass proves it is needed.
+4. Improve visual readability and world presentation.
+5. Re-run Android packaging and physical-device regression checks.
+
+Target: keep each item small enough to validate in one cycle before the next change begins.
 
 ---
 

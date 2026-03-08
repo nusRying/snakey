@@ -129,4 +129,27 @@ describe('GameEngine managed match flow', () => {
     );
     expect(roomManager.finishGame).toHaveBeenCalledOnce();
   });
+
+  it('latches one-shot ability input until the server tick consumes it', () => {
+    const engine = new GameEngine(ioMock.io, 'FFA');
+    engine.botController.update = vi.fn();
+
+    engine.world.players = {};
+    engine.world.pellets = {};
+    engine.world.obstacles = [];
+    engine.world.blackHoles = [];
+    engine.world.wormholes = [];
+    engine.world.addPlayer('player-1', { name: 'Alice', baseColor: '#00ffcc' });
+    engine.world.players['player-1'].position = { x: 1500, y: 1500 };
+    engine.world.players['player-1'].segments = Array.from({ length: 5 }, () => ({ x: 1500, y: 1500 }));
+
+    engine.handleInput('player-1', { angle: 0, isBoosting: false, useAbility: true });
+    engine.handleInput('player-1', { angle: 0, isBoosting: false, useAbility: false });
+
+    engine.tick(0.05, Date.now());
+
+    expect(engine.world.players['player-1'].ability.isActive).toBe(true);
+    expect(engine.inputs['player-1'].useAbility).toBe(false);
+    expect(engine.world.players['player-1'].ability.cooldown).toBeGreaterThan(0);
+  });
 });

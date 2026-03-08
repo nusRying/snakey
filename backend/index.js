@@ -56,6 +56,8 @@ const io = new Server(server, {
   },
 });
 
+const DEFAULT_PORT = 3210;
+
 const managedRoomModes = new Set(
   Object.keys(MODE_CONFIGS).filter((mode) => getModeConfig(mode).managedRoom)
 );
@@ -208,7 +210,23 @@ app.post('/api/account/link-google', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3000;
+const parsedPort = Number.parseInt(process.env.PORT || '', 10);
+const PORT = Number.isFinite(parsedPort) ? parsedPort : DEFAULT_PORT;
+
+server.on('error', (error) => {
+  if (error && error.code === 'EADDRINUSE') {
+    console.error(
+      `Snakey backend could not start because port ${PORT} is already in use. ` +
+        'Set PORT to a different value or stop the conflicting process.'
+    );
+    process.exit(1);
+    return;
+  }
+
+  console.error('Snakey backend failed to start', error);
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
   console.log(`Snake.io Backend listening on port ${PORT}`);
 });

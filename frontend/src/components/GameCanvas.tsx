@@ -64,6 +64,7 @@ const GameCanvas = ({ profile, onGameOver, onConnectionLost }: GameCanvasProps) 
   const [readyPending, setReadyPending] = useState(false);
   const [connectionDetail, setConnectionDetail] = useState<string | null>(null);
   const [healthDetail, setHealthDetail] = useState<string | null>(null);
+  const [arenaReady, setArenaReady] = useState(false);
   const backendTarget = getBackendDisplayTarget();
 
   useEffect(() => {
@@ -96,6 +97,9 @@ const GameCanvas = ({ profile, onGameOver, onConnectionLost }: GameCanvasProps) 
         setPing(Math.round(gameManagerRef.current.currentLag || 0));
         setRoomStatus((gameManagerRef.current.roomStatus as RoomStatus) || null);
         setConnectionDetail(gameManagerRef.current.lastConnectionError || null);
+        setArenaReady(
+          Boolean(gameManagerRef.current.hasInitialWorldState || gameManagerRef.current.hasLiveWorldState)
+        );
       }
     }, 250);
 
@@ -162,6 +166,9 @@ const GameCanvas = ({ profile, onGameOver, onConnectionLost }: GameCanvasProps) 
     gameManagerRef.current.setReadyState(true);
   };
 
+  const loadingStatus = connStatus === 'connected' && !arenaReady ? 'syncing' : connStatus;
+  const shouldShowLoading = connStatus !== 'connected' || !arenaReady;
+
   return (
     <div className="game-canvas-shell">
       <canvas
@@ -169,13 +176,18 @@ const GameCanvas = ({ profile, onGameOver, onConnectionLost }: GameCanvasProps) 
         className="game-canvas-surface"
       />
 
-      {connStatus !== 'connected' && (
+      {shouldShowLoading && (
         <LoadingScreen
-          status={connStatus}
+          status={loadingStatus}
           onRetry={handleRetry}
           target={backendTarget}
           health={healthDetail}
           detail={connectionDetail}
+          copy={
+            loadingStatus === 'syncing'
+              ? 'Loading arena geometry, hazards, pellets, and the first stable world snapshot before play begins.'
+              : undefined
+          }
         />
       )}
 

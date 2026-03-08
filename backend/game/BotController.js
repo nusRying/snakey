@@ -7,13 +7,13 @@ class BotController {
     this.isOfflinePractice = gameEngine.roomId === 'OFFLINE';
 
     this.bots = new Map(); // Map of botId -> bot configuration
-    this.targetPopulation = this.isOfflinePractice ? 26 : 0;
-    this.maxBots = this.isOfflinePractice ? 25 : 0;
+    this.targetPopulation = this.isOfflinePractice ? 17 : 0;
+    this.maxBots = this.isOfflinePractice ? 18 : 0;
     this.botCounter = 0;
 
     this.targetAngleOffsetRange = Math.PI / 4; // Max deviation when wandering
     this.decisionTick = 0;
-    this.decisionStride = this.isOfflinePractice ? 4 : 2;
+    this.decisionStride = this.isOfflinePractice ? 5 : 2;
 
     this.respawnQueue = []; // [{ time: spawnAtTime }]
     this.respawnDelay = this.isOfflinePractice ? 2400 : 5000;
@@ -21,6 +21,7 @@ class BotController {
   }
 
   update(pelletTree, bodyTree) {
+    this.world = this.gameEngine.world;
     this.currentPelletTree = pelletTree;
     this.currentBodyTree = bodyTree;
     this.balancePopulation();
@@ -28,17 +29,75 @@ class BotController {
     this.calculateBotDecisions();
   }
 
+  getHumanPlayers() {
+    return Object.values(this.world.players).filter((player) => !player.id.startsWith('bot_'));
+  }
+
+  getOfflinePopulationTarget(humanPlayers) {
+    if (!this.isOfflinePractice) {
+      return this.targetPopulation;
+    }
+
+    const hasUltraSmoothHuman = humanPlayers.some(
+      (player) => player.performancePreset === 'ultra'
+    );
+
+    return hasUltraSmoothHuman ? 19 : 15;
+  }
+
+  getPreferredSpawnPosition() {
+    const humanPlayers = this.getHumanPlayers();
+    if (!this.isOfflinePractice || humanPlayers.length === 0) {
+      return this.world.getSafeSpawnPosition(12, 220);
+    }
+
+    const anchor = humanPlayers[Math.floor(Math.random() * humanPlayers.length)];
+    const extraCircles = Object.values(this.world.players).map((player) => ({
+      x: player.position.x,
+      y: player.position.y,
+      radius: Math.max(36, (player.radius || 12) * 3),
+    }));
+
+    for (let attempt = 0; attempt < 18; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 260 + Math.random() * 460;
+      const position = {
+        x: anchor.position.x + Math.cos(angle) * distance,
+        y: anchor.position.y + Math.sin(angle) * distance,
+      };
+
+      const margin = 120;
+      if (
+        position.x < margin ||
+        position.y < margin ||
+        position.x > this.world.bounds.width - margin ||
+        position.y > this.world.bounds.height - margin
+      ) {
+        continue;
+      }
+
+      if (!this.world.isPositionBlocked(position, 12, 24, extraCircles)) {
+        return position;
+      }
+    }
+
+    return this.world.getSafeSpawnPosition(12, 220, extraCircles);
+  }
+
   balancePopulation() {
-    const allPlayers = Object.values(this.world.players);
-    const humanCount = allPlayers.filter((player) => !player.id.startsWith('bot_')).length;
+    const humanPlayers = this.getHumanPlayers();
+    const humanCount = humanPlayers.length;
     const currentBots = this.bots.size;
     const queuedBots = this.respawnQueue.length;
-    const targetBots = Math.max(0, Math.min(this.maxBots, this.targetPopulation - humanCount));
+    const offlineTargetPopulation = this.getOfflinePopulationTarget(humanPlayers);
+    const targetPopulation = this.isOfflinePractice ? offlineTargetPopulation : this.targetPopulation;
+    const maxBots = this.isOfflinePractice ? offlineTargetPopulation : this.maxBots;
+    const targetBots = Math.max(0, Math.min(maxBots, targetPopulation - humanCount));
     const now = Date.now();
 
     // Check if we need to queue a respawn
     if (currentBots + queuedBots < targetBots) {
-      const initialBurst = this.isOfflinePractice ? (currentBots < 8 ? 5 : 2) : 1;
+      const initialBurst = this.isOfflinePractice ? (currentBots < 6 ? 6 : 2) : 1;
 
       for (
         let i = 0;
@@ -65,7 +124,7 @@ class BotController {
   spawnBot() {
     const botId = `bot_${this.botCounter++}`;
     const newBotUser = new Player(botId, this.world.bounds);
-    const spawnPosition = this.world.getSafeSpawnPosition(12, 220);
+    const spawnPosition = this.getPreferredSpawnPosition();
     newBotUser.position = spawnPosition;
     newBotUser.segments = Array.from({ length: 5 }, () => ({ ...spawnPosition }));
 
@@ -155,10 +214,10 @@ class BotController {
       // 3. Potential Field: Pellets (Attraction)
       const pelletSearchDist = this.isOfflinePractice
         ? botPlayer.mass > 600
-          ? 260
+          ? 220
           : botPlayer.mass > 300
-          ? 360
-          : 480
+          ? 300
+          : 420
         : 1000;
       const nearbyPellets = this.currentPelletTree
         ? this.currentPelletTree.query({

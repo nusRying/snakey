@@ -251,6 +251,8 @@ export class GameManager {
   currentLag: number;
   serverMetrics?: Record<string, unknown>;
   roomStatus: RoomStatus | null;
+  hasInitialWorldState: boolean;
+  hasLiveWorldState: boolean;
 
   myId: string | null;
   input: { angle: number; isBoosting: boolean; useAbility: boolean };
@@ -308,7 +310,14 @@ export class GameManager {
     this.profile = profile || { name: 'Player', selectedSkin: 'default' };
     this.performancePreset = this.profile.performancePreset === 'ultra' ? 'ultra' : 'adaptive';
     this.isOfflinePracticeMode = (this.profile.mode as string) === 'OFFLINE';
-    this.qualityTier = this.performancePreset === 'ultra' ? 'performance' : this.isMobileClient ? 'performance' : 'quality';
+    this.qualityTier =
+      this.performancePreset === 'ultra'
+        ? 'performance'
+        : this.isMobileClient
+          ? 'performance'
+          : this.isOfflinePracticeMode
+            ? 'balanced'
+            : 'quality';
     this.maxTrailParticles = 0;
     this.maxDeathParticles = 0;
     this.onGameOver = onGameOver;
@@ -393,11 +402,13 @@ export class GameManager {
     this.stateBuffer = [];
     this.snapshotIntervals = [];
     this.lastSnapshotTime = null;
-    this.renderDelay = this.isMobileClient ? 110 : 125;
+    this.renderDelay = this.isMobileClient ? 96 : 108;
     this.serverClockOffset = 0;
     this.hasSyncedClock = false;
     this.currentLag = 0;
     this.roomStatus = null;
+    this.hasInitialWorldState = false;
+    this.hasLiveWorldState = false;
 
     this.myId = null;
     this.input = { angle: 0, isBoosting: false, useAbility: false };
@@ -563,6 +574,8 @@ export class GameManager {
 
     if (this.performancePreset === 'ultra') {
       this.renderer.lowEffects = true;
+      this.renderer.skipBodyPatterns = true;
+      this.renderer.maxVisiblePellets = this.isMobileClient ? 120 : 180;
       this.maxTrailParticles = this.isMobileClient ? 10 : 64;
       this.maxDeathParticles = this.isMobileClient ? 6 : 28;
       return;
@@ -570,14 +583,20 @@ export class GameManager {
 
     if (nextTier === 'performance') {
       this.renderer.lowEffects = true;
+      this.renderer.skipBodyPatterns = true;
+      this.renderer.maxVisiblePellets = this.isMobileClient ? 140 : this.isOfflinePracticeMode ? 190 : 240;
       this.maxTrailParticles = this.isMobileClient ? (this.isOfflinePracticeMode ? 18 : 24) : 120;
       this.maxDeathParticles = this.isMobileClient ? (this.isOfflinePracticeMode ? 10 : 12) : 54;
     } else if (nextTier === 'balanced') {
-      this.renderer.lowEffects = this.isMobileClient;
+      this.renderer.lowEffects = this.isMobileClient || this.isOfflinePracticeMode;
+      this.renderer.skipBodyPatterns = this.isMobileClient || this.isOfflinePracticeMode;
+      this.renderer.maxVisiblePellets = this.isMobileClient ? 180 : this.isOfflinePracticeMode ? 260 : 320;
       this.maxTrailParticles = this.isMobileClient ? (this.isOfflinePracticeMode ? 36 : 48) : 180;
       this.maxDeathParticles = this.isMobileClient ? (this.isOfflinePracticeMode ? 14 : 18) : 72;
     } else {
       this.renderer.lowEffects = false;
+      this.renderer.skipBodyPatterns = this.isOfflinePracticeMode;
+      this.renderer.maxVisiblePellets = this.isMobileClient ? 220 : this.isOfflinePracticeMode ? 320 : 420;
       this.maxTrailParticles = this.isMobileClient ? 72 : 240;
       this.maxDeathParticles = this.isMobileClient ? 24 : 110;
     }
@@ -825,6 +844,26 @@ export class GameManager {
     this.animationFrameId = requestAnimationFrame(this.loop);
   }
 
+  applySnapshotState(snapshot: Record<string, unknown> | null | undefined) {
+    if (!snapshot) return;
+
+    const nextSnapshot = snapshot as Partial<SnapshotState>;
+
+    if (nextSnapshot.players) this.state.players = nextSnapshot.players;
+    if (nextSnapshot.pellets) this.state.pellets = nextSnapshot.pellets;
+    if (typeof nextSnapshot.stormRadius !== 'undefined') this.state.stormRadius = nextSnapshot.stormRadius;
+    if (typeof nextSnapshot.stormCenter !== 'undefined') this.state.stormCenter = nextSnapshot.stormCenter;
+    if (typeof nextSnapshot.teamScores !== 'undefined') this.state.teamScores = nextSnapshot.teamScores;
+    if (typeof nextSnapshot.obstacles !== 'undefined') this.state.obstacles = nextSnapshot.obstacles;
+    if (typeof nextSnapshot.blackHoles !== 'undefined') this.state.blackHoles = nextSnapshot.blackHoles;
+    if (typeof nextSnapshot.wormholes !== 'undefined') this.state.wormholes = nextSnapshot.wormholes;
+    if (typeof nextSnapshot.kingId !== 'undefined') this.state.kingId = nextSnapshot.kingId;
+    if (typeof nextSnapshot.powerUps !== 'undefined') this.state.powerUps = nextSnapshot.powerUps;
+    if (typeof nextSnapshot.roomState !== 'undefined') this.state.roomState = nextSnapshot.roomState;
+    if (typeof nextSnapshot.roomStatus !== 'undefined') this.state.roomStatus = nextSnapshot.roomStatus;
+    if (typeof nextSnapshot.bounds !== 'undefined') this.state.bounds = nextSnapshot.bounds;
+  }
+
   resetNetworkState() {
     this.state.players = {};
     this.state.pellets = {};
@@ -843,6 +882,8 @@ export class GameManager {
     this.localPeakMass = 50;
     this.killStreak = 0;
     this.lastKillAt = 0;
+    this.hasInitialWorldState = false;
+    this.hasLiveWorldState = false;
   }
 
   getChallengeMetricValue(metric: string) {
@@ -955,8 +996,8 @@ export class GameManager {
       recentIntervals.length;
 
     const targetDelay = Math.max(
-      this.isMobileClient ? 72 : 78,
-      Math.min(180, averageInterval * 1.55 + averageJitter * 1.8 + this.currentLag * 0.16 + 12)
+      this.isMobileClient ? 66 : 72,
+      Math.min(170, averageInterval * 1.45 + averageJitter * 1.6 + this.currentLag * 0.14 + 10)
     );
 
     this.renderDelay += (targetDelay - this.renderDelay) * 0.15;
@@ -1043,7 +1084,12 @@ export class GameManager {
   }
 
   interpolateState() {
-    if (this.stateBuffer.length < 2) return;
+    if (this.stateBuffer.length < 2) {
+      if (this.stateBuffer.length === 1) {
+        this.applySnapshotState(this.stateBuffer[0]);
+      }
+      return;
+    }
 
     const renderTime = Date.now() - this.serverClockOffset - this.renderDelay;
 
@@ -1070,18 +1116,7 @@ export class GameManager {
       }
       t = Math.max(0, Math.min(1, t));
 
-      if (s0.pellets) this.state.pellets = s0.pellets;
-      if (typeof s0.stormRadius !== 'undefined') this.state.stormRadius = s0.stormRadius;
-      if (typeof s0.stormCenter !== 'undefined') this.state.stormCenter = s0.stormCenter;
-      if (typeof s0.teamScores !== 'undefined') this.state.teamScores = s0.teamScores;
-      if (typeof s0.obstacles !== 'undefined') this.state.obstacles = s0.obstacles;
-      if (typeof s0.blackHoles !== 'undefined') this.state.blackHoles = s0.blackHoles;
-      if (typeof s0.wormholes !== 'undefined') this.state.wormholes = s0.wormholes;
-      if (typeof s0.kingId !== 'undefined') this.state.kingId = s0.kingId;
-      if (typeof s0.powerUps !== 'undefined') this.state.powerUps = s0.powerUps;
-      if (typeof s0.roomState !== 'undefined') this.state.roomState = s0.roomState;
-      if (typeof s0.roomStatus !== 'undefined') this.state.roomStatus = s0.roomStatus;
-      if (typeof s0.bounds !== 'undefined') this.state.bounds = s0.bounds;
+      this.applySnapshotState(s0);
 
       const interpolatedPlayers: Record<string, PlayerState> = {};
       for (const id in s0.players) {

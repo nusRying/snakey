@@ -1560,6 +1560,80 @@ input {
   word-break: break-word;
 }
 
+.loading-overlay-app {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+}
+
+.boot-loading-card {
+  max-width: 520px;
+}
+
+.boot-progress-shell {
+  width: 100%;
+  height: 10px;
+  margin-top: 18px;
+  border: none;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  appearance: none;
+}
+
+.boot-progress-shell::-webkit-progress-bar {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+.boot-progress-shell::-webkit-progress-value {
+  background: linear-gradient(90deg, #d6ff5e, #4df2d7, #7de3ff);
+  border-radius: 999px;
+  transition: width 180ms ease;
+}
+
+.boot-progress-shell::-moz-progress-bar {
+  background: linear-gradient(90deg, #d6ff5e, #4df2d7, #7de3ff);
+  border-radius: 999px;
+}
+
+.boot-step-list {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.boot-step-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(235, 255, 242, 0.82);
+  font-size: 0.95rem;
+}
+
+.boot-step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  flex: 0 0 auto;
+}
+
+.boot-step-row.is-loading .boot-step-dot {
+  background: #d6ff5e;
+  box-shadow: 0 0 12px rgba(214, 255, 94, 0.6);
+}
+
+.boot-step-row.is-done .boot-step-dot {
+  background: #4df2d7;
+}
+
+.boot-step-row.is-failed .boot-step-dot {
+  background: #ffd27a;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

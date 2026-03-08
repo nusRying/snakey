@@ -90,4 +90,26 @@ describe('WorldState snapshot serialization', () => {
     expect(snapshot.players.far.ability.isActive).toBe(false);
     expect(snapshot.players.far.position).toEqual({ x: 2800, y: 2800 });
   });
+
+  it('includes obstacles and map hazards in snapshots so the client can render lethal map features', () => {
+    const world = new WorldState({
+      bounds: { width: 2200, height: 2200 },
+      blackHoleCount: 1,
+      wormholePairs: 1,
+      obstacles: [{ id: 'lcd-top', x: 330, y: 300, width: 1540, height: 110, style: 'lcd_bar' }],
+    });
+    world.addPlayer('viewer', { name: 'Viewer' });
+
+    const fullSnapshot = world.getSnapshot();
+    const viewerSnapshot = world.getSnapshotForPlayer('viewer');
+
+    expect(fullSnapshot.obstacles).toEqual([
+      { id: 'lcd-top', x: 330, y: 300, width: 1540, height: 110, style: 'lcd_bar' },
+    ]);
+    expect(viewerSnapshot.obstacles).toEqual(fullSnapshot.obstacles);
+    expect(fullSnapshot.blackHoles?.length).toBe(1);
+    expect(viewerSnapshot.blackHoles?.length).toBe(1);
+    expect(fullSnapshot.wormholes?.length).toBe(2);
+    expect(viewerSnapshot.wormholes?.length).toBe(2);
+  });
 });
